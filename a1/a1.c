@@ -6,25 +6,45 @@
 #include <sys/stat.h>
 #include <unistd.h>
 #include <dirent.h>
+#include <fcntl.h>
 
-void listRec(const char *path)
+// LISTARE RECURSIVA
+
+void listRecFilter(const char *path, char *filStart, int filterStr, int filterPerm)
 {
     DIR *dir = opendir(path);
     struct dirent *entry = readdir(dir);
     char fullPath[512];
-    struct stat statbuf;    
-  
-    while ( entry != NULL)
+    struct stat statbuf;
+    while (entry != NULL)
     {
         if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0)
         {
             snprintf(fullPath, 512, "%s/%s", path, entry->d_name);
             if (lstat(fullPath, &statbuf) == 0)
             {
-                printf("%s\n", fullPath);
+                if (filterStr == 1)
+                {
+                    if (strncmp(entry->d_name, filStart, strlen(filStart)) == 0)
+                    {
+                        printf("%s\n", fullPath);
+                    }
+                }
+                else if (filterPerm == 1)
+                {
+                    if (statbuf.st_mode & S_IXUSR)
+                    {
+                        printf("%s\n", fullPath);
+                    }
+                }
+                if (filterStr == 0 && filterPerm == 0)
+                {
+                    printf("%s\n", fullPath);
+                }
+
                 if (S_ISDIR(statbuf.st_mode))
                 {
-                    listRec(fullPath);
+                    listRecFilter(fullPath, filStart, filterStr, filterPerm);
                 }
             }
         }
@@ -32,12 +52,17 @@ void listRec(const char *path)
     }
     closedir(dir);
 }
-void list(const char *path)
+
+// LISTARE NORMALA
+
+void listFilter(const char *path, char *filStart, int filterStr, int filterPerm)
 {
+    char fullPath[512];
+    struct stat statbuf;
     DIR *dir = opendir(path);
     if (dir == NULL)
     {
-        perror("ERROR\ninvalid directory path");
+        printf("ERROR\ninvalid directory path");
         return;
     }
     printf("SUCCESS\n");
@@ -46,31 +71,128 @@ void list(const char *path)
     {
         if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0)
         {
-            printf("%s/%s\n", path, entry->d_name);
+            if (filterStr == 1)
+            {
+                if (strncmp(entry->d_name, filStart, strlen(filStart)) == 0)
+                {
+                    printf("%s/%s\n", path, entry->d_name);
+                }
+            }
+            else if (filterPerm == 1)
+            {
+                snprintf(fullPath, 512, "%s/%s", path, entry->d_name);
+                if (lstat(fullPath, &statbuf) == 0)
+                {
+                    if (statbuf.st_mode & S_IXUSR)
+                    {
+                        printf("%s/%s\n", path, entry->d_name);
+                    }
+                }
+            }
+            if (filterPerm == 0 && filterStr == 0)
+            {
+                printf("%s/%s\n", path, entry->d_name);
+            }
         }
         entry = readdir(dir);
     }
     closedir(dir);
 }
+void parseSF(const char *path)
+{
+    int fis = -1;
+    fis = open(path, O_RDONLY);
+    if (fis == -1)
+    {
+       printf("Nu s-a deschis");
+        return;
+    }
 
+    lseek(fis, -3, SEEK_END);
+    unsigned short header_size;
+    read(fis, &header_size, 2);
+
+    char magic;
+    read(fis, &magic, 1);
+    if (magic != 'M')
+    {
+        printf("ERROR\nwrong magic");
+        return;
+    }    
+ 
+    lseek(fis,-header_size,SEEK_END);
+
+    unsigned short version = 0;
+    read(fis, &version, 2);
+    if (version < 83 || version > 107)
+    {
+       printf("ERROR\nwrong version");
+        return;
+    }
+    
+    char no_sect;
+    read(fis, &no_sect, 1);
+    if (no_sect < 2 || no_sect > 20)
+    {
+        printf("ERROR\nwrong sect_nr");
+        return;
+    }
+
+    char sect_name[6];
+    unsigned short sect_type;
+    int sect_size, sect_offset;
+    for (int i = 0; i < no_sect; i++)
+    {
+        read(fis, sect_name, 6);
+        read(fis, &sect_type, 2);
+        read(fis, &sect_offset, 4);
+        read(fis, &sect_size, 4);
+        if (sect_type != 89 && sect_type != 47 && sect_type != 86)
+        {
+            printf("ERROR\nwrong sect_types");
+            return;
+        }
+        lseek(fis,2,SEEK_CUR);
+    }
+    lseek(fis,-header_size,SEEK_END);
+    printf("SUCCESS\n");
+    printf("version=%d\n", version);
+    printf("nr_sections=%d\n", no_sect);
+    for (int i = 0; i < no_sect; i++)
+    {
+        int size= read(fis, sect_name, 6);
+        sect_name[size] = '\0';
+        read(fis, &sect_type, 2);
+        read(fis, &sect_offset, 4);
+        read(fis, &sect_size, 4);
+        int j= i+1;
+        printf("section%d: %s %d %d\n", j, sect_name, sect_type, sect_size);
+        lseek(fis,2,SEEK_CUR);
+    }
+
+    close(fis);
+}
 int main(int argc, char **argv)
 {
-    int recursiveFlag, pathFlag, filterFlag, listFlag;
+    int recursiveFlag = 0, pathFlag = 0, filterStrFlag = 0, listFlag = 0, filterFlag = 0, parseFlag = 0;
     char *myPath = NULL, *filter = NULL;
 
     if (argc >= 2)
     {
-
         for (int i = 0; i < argc; i++)
         {
-
             if (strcmp(argv[i], "variant") == 0)
             {
                 printf("12095\n");
+                return 0;
             }
             else if (strcmp(argv[i], "recursive") == 0)
             {
                 recursiveFlag = 1;
+            }
+            else if (strcmp(argv[i], "parse") == 0)
+            {
+                parseFlag = 1;
             }
             else if (strstr(argv[i], "path=") != NULL)
             {
@@ -80,15 +202,13 @@ int main(int argc, char **argv)
             }
             else if (strstr(argv[i], "name_starts_with=") != NULL)
             {
-                filterFlag = 1;
+                filterStrFlag = 1;
                 filter = (char *)malloc(sizeof(char) * (strlen(argv[i]) - 16));
                 sscanf(argv[i], "name_starts_with=%s", filter);
             }
-            else if (strstr(argv[i], "has_perm_execute=") != NULL)
+            else if (strcmp(argv[i], "has_perm_execute") == 0)
             {
                 filterFlag = 1;
-                filter = (char *)malloc(sizeof(char) * (strlen(argv[i]) - 16));
-                sscanf(argv[i], "has_perm_execute=%s", filter);
             }
             else if (strcmp(argv[i], "list") == 0)
             {
@@ -102,26 +222,28 @@ int main(int argc, char **argv)
                 DIR *nouDir = opendir(myPath);
                 if (nouDir == NULL)
                 {
-                    perror("ERROR\ninvalid directory path");
+                    printf("ERROR\ninvalid directory path");
                 }
                 else
                 {
                     printf("SUCCESS\n");
-                    listRec(myPath);
+                    listRecFilter(myPath, filter, filterStrFlag, filterFlag);
                 }
             }
+            
         }
         else
         {
             if (listFlag == 1 && pathFlag == 1)
             {
-
-                list(myPath);
-                if(filterFlag){
-                    ///in cazul in care avem filtre
-                }
+                listFilter(myPath, filter, filterStrFlag, filterFlag);
+            }
+            else if (pathFlag == 1 && parseFlag == 1)
+            {
+                parseSF(myPath);
             }
         }
-        return 0;
+     
     }
+    return 0;
 }
