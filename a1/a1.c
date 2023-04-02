@@ -139,7 +139,7 @@ void parseSF(const char *path)
     }
 
     char sect_name[6];
-    unsigned short sect_type;
+    int sect_type;
     int sect_size, sect_offset;
     for (int i = 0; i < no_sect; i++)
     {
@@ -152,11 +152,11 @@ void parseSF(const char *path)
             printf("ERROR\nwrong sect_types");
             return;
         }
-        lseek(fis,2,SEEK_CUR);
     }
     lseek(fis,-header_size,SEEK_END);
+    lseek(fis,3,SEEK_CUR);
     printf("SUCCESS\n");
-    printf("version=%d\n", version);
+    printf("version=%hu\n", version);
     printf("nr_sections=%d\n", no_sect);
     for (int i = 0; i < no_sect; i++)
     {
@@ -165,11 +165,9 @@ void parseSF(const char *path)
         read(fis, &sect_type, 2);
         read(fis, &sect_offset, 4);
         read(fis, &sect_size, 4);
-        int j= i+1;
-        printf("section%d: %s %d %d\n", j, sect_name, sect_type, sect_size);
-        lseek(fis,2,SEEK_CUR);
+        printf("section%d: %s %hu %d\n", i+1, sect_name, sect_type, sect_size);
+       
     }
-
     close(fis);
 }
 int main(int argc, char **argv)
