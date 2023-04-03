@@ -7,7 +7,6 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
-#include <arpa/inet.h>
 
 // LISTARE RECURSIVA
 
@@ -155,9 +154,15 @@ int parseSF(const char *path, int extr)
     lseek(fis, 3, SEEK_CUR);
     if (extr == 0)
     {
+        char versionString[10];
+        char noSectString[10];
+
+        sprintf(versionString, "%hu", version);
+        sprintf(noSectString, "%d", no_sect);
+
         printf("SUCCESS\n");
-        printf("version=%hu\n", version);
-        printf("nr_sections=%d\n", no_sect);
+        printf("version=%s\n", versionString);
+        printf("nr_sections=%s\n", noSectString);
         for (int i = 0; i < no_sect; i++)
         {
             int size = read(fis, sect_name, 6);
@@ -266,23 +271,24 @@ void extractFrSF(const char *path, int section, int line)
                 j++;
             }
             if (nrLinie + 1 == line)
+            {
+                lungimeLinie = j - start;
+                char *linie = (char *)malloc(sizeof(char) * lungimeLinie);
+                lseek(fis, sect_offset + start, SEEK_SET);
+                read(fis, linie, lungimeLinie);
+                linie[lungimeLinie] = '\0';
+                printf("SUCCESS\n");
+                for (int k = lungimeLinie - 1; k >= 0; k--)
                 {
-                    lungimeLinie = j - start;
-                    char *linie = (char *)malloc(sizeof(char) * lungimeLinie);
-                    lseek(fis, sect_offset + start, SEEK_SET);
-                    read(fis, linie, lungimeLinie);
-                    linie[lungimeLinie] = '\0';
-                    printf("SUCCESS\n");
-                    for (int k = lungimeLinie - 1; k >= 0; k--)
-                    {
-                        printf("%c", linie[k]);
-                    }
-                    free(linie);
-                    return;
+                    printf("%c", linie[k]);
                 }
+                free(linie);
+                return;
+            }
         }
     }
 }
+
 
 int main(int argc, char **argv)
 {
@@ -341,6 +347,7 @@ int main(int argc, char **argv)
                 sscanf(argv[i], "line=%d", &line);
                 lineFlag = 1;
             }
+
         }
         if (extractFlag == 1 && pathFlag == 1 && lineFlag == 1 && sectionFlag == 1)
         {
