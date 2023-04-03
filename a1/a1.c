@@ -7,6 +7,7 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
+#include <arpa/inet.h>
 
 // LISTARE RECURSIVA
 
@@ -98,14 +99,15 @@ void listFilter(const char *path, char *filStart, int filterStr, int filterPerm)
     }
     closedir(dir);
 }
-void parseSF(const char *path)
+
+// PARSE
+int parseSF(const char *path, int extr)
 {
     int fis = -1;
     fis = open(path, O_RDONLY);
     if (fis == -1)
     {
-       printf("Nu s-a deschis");
-        return;
+        return -1;
     }
 
     lseek(fis, -3, SEEK_END);
@@ -116,30 +118,27 @@ void parseSF(const char *path)
     read(fis, &magic, 1);
     if (magic != 'M')
     {
-        printf("ERROR\nwrong magic");
-        return;
-    }    
- 
-    lseek(fis,-header_size,SEEK_END);
+        return -2;
+    }
+
+    lseek(fis, -header_size, SEEK_END);
 
     unsigned short version = 0;
     read(fis, &version, 2);
     if (version < 83 || version > 107)
     {
-       printf("ERROR\nwrong version");
-        return;
+        return -3;
     }
-    
-    char no_sect;
+
+    unsigned char no_sect;
     read(fis, &no_sect, 1);
     if (no_sect < 2 || no_sect > 20)
     {
-        printf("ERROR\nwrong sect_nr");
-        return;
+        return -4;
     }
 
     char sect_name[6];
-    int sect_type;
+    unsigned short sect_type;
     int sect_size, sect_offset;
     for (int i = 0; i < no_sect; i++)
     {
@@ -149,31 +148,147 @@ void parseSF(const char *path)
         read(fis, &sect_size, 4);
         if (sect_type != 89 && sect_type != 47 && sect_type != 86)
         {
-            printf("ERROR\nwrong sect_types");
-            return;
+            return -5;
         }
     }
-    lseek(fis,-header_size,SEEK_END);
-    lseek(fis,3,SEEK_CUR);
-    printf("SUCCESS\n");
-    printf("version=%hu\n", version);
-    printf("nr_sections=%d\n", no_sect);
+    lseek(fis, -header_size, SEEK_END);
+    lseek(fis, 3, SEEK_CUR);
+    if (extr == 0)
+    {
+        printf("SUCCESS\n");
+        printf("version=%hu\n", version);
+        printf("nr_sections=%d\n", no_sect);
+        for (int i = 0; i < no_sect; i++)
+        {
+            int size = read(fis, sect_name, 6);
+            sect_name[size] = '\0';
+            read(fis, &sect_type, 2);
+            read(fis, &sect_offset, 4);
+            read(fis, &sect_size, 4);
+            printf("section%d: %s %hu %d\n", i + 1, sect_name, sect_type, sect_size);
+        }
+    }
+    close(fis);
+    return 1;
+}
+void finalParseSF(const char *path)
+{
+    int result = parseSF(path, 0);
+    if (result == -1)
+    {
+        printf("ERROR\ninvalid file");
+    }
+    else if (result == -2)
+    {
+        printf("ERROR\nwrong magic");
+    }
+    else if (result == -3)
+    {
+        printf("ERROR\nwrong version");
+    }
+    else if (result == -4)
+    {
+        printf("ERROR\nwrong sect_nr");
+    }
+    else if (result == -5)
+    {
+        printf("ERROR\nwrong sect_types");
+    }
+}
+void extractFrSF(const char *path, int section, int line)
+{
+    if (parseSF(path, 1) != 1)
+    {
+        printf("ERROR\ninvalid file");
+        return;
+    }
+
+    int fis = open(path, O_RDONLY);
+
+    lseek(fis, -3, SEEK_END);
+    unsigned short header_size;
+    read(fis, &header_size, 2);
+
+    char magic;
+    read(fis, &magic, 1);
+    lseek(fis, -header_size, SEEK_END);
+
+    unsigned short version = 0;
+    read(fis, &version, 2);
+    unsigned char no_sect;
+    read(fis, &no_sect, 1);
+
+    char sect_name[6];
+    unsigned short sect_type;
+    int sect_size, sect_offset;
+    if (no_sect < section || section == 0)
+    {
+        printf("ERROR\ninvalid section");
+        return;
+    }
     for (int i = 0; i < no_sect; i++)
     {
-        int size= read(fis, sect_name, 6);
-        sect_name[size] = '\0';
+        read(fis, sect_name, 6);
         read(fis, &sect_type, 2);
         read(fis, &sect_offset, 4);
         read(fis, &sect_size, 4);
-        printf("section%d: %s %hu %d\n", i+1, sect_name, sect_type, sect_size);
-       
+
+        if ((i + 1) == section)
+        {
+            lseek(fis, sect_offset, SEEK_SET);
+            char c;
+            int nrLinie = 0, lungimeLinie, j = 0, start = -1;
+
+            while (j < sect_size)
+            {
+                read(fis, &c, 1);
+                if (c == '\n')
+                {
+                    nrLinie++;
+                    if (line == nrLinie)
+                    {
+                        lungimeLinie = j - start;
+                        char *linie = (char *)malloc(sizeof(char) * lungimeLinie);
+                        lseek(fis, sect_offset + start, SEEK_SET);
+                        read(fis, linie, lungimeLinie);
+                        linie[lungimeLinie] = '\0';
+                        printf("SUCCESS\n");
+                        for (int k = lungimeLinie - 1; k >= 0; k--)
+                        {
+                            printf("%c", linie[k]);
+                        }
+                        free(linie);
+                        return;
+                    }
+                    start = j;
+                }
+
+                j++;
+            }
+            if (nrLinie + 1 == line)
+                {
+                    lungimeLinie = j - start;
+                    char *linie = (char *)malloc(sizeof(char) * lungimeLinie);
+                    lseek(fis, sect_offset + start, SEEK_SET);
+                    read(fis, linie, lungimeLinie);
+                    linie[lungimeLinie] = '\0';
+                    printf("SUCCESS\n");
+                    for (int k = lungimeLinie - 1; k >= 0; k--)
+                    {
+                        printf("%c", linie[k]);
+                    }
+                    free(linie);
+                    return;
+                }
+        }
     }
-    close(fis);
 }
+
 int main(int argc, char **argv)
 {
     int recursiveFlag = 0, pathFlag = 0, filterStrFlag = 0, listFlag = 0, filterFlag = 0, parseFlag = 0;
     char *myPath = NULL, *filter = NULL;
+    int line, section, extractFlag = 0, lineFlag = 0, sectionFlag = 0;
 
     if (argc >= 2)
     {
@@ -212,8 +327,26 @@ int main(int argc, char **argv)
             {
                 listFlag = 1;
             }
+            else if (strcmp(argv[i], "extract") == 0)
+            {
+                extractFlag = 1;
+            }
+            else if (strstr(argv[i], "section=") != NULL)
+            {
+                sscanf(argv[i], "section=%d", &section);
+                sectionFlag = 1;
+            }
+            else if (strstr(argv[i], "line=") != NULL)
+            {
+                sscanf(argv[i], "line=%d", &line);
+                lineFlag = 1;
+            }
         }
-        if (recursiveFlag == 1)
+        if (extractFlag == 1 && pathFlag == 1 && lineFlag == 1 && sectionFlag == 1)
+        {
+            extractFrSF(myPath, section, line);
+        }
+        else if (recursiveFlag == 1)
         {
             if (listFlag == 1 && pathFlag == 1)
             {
@@ -227,8 +360,8 @@ int main(int argc, char **argv)
                     printf("SUCCESS\n");
                     listRecFilter(myPath, filter, filterStrFlag, filterFlag);
                 }
+                free(nouDir);
             }
-            
         }
         else
         {
@@ -238,10 +371,11 @@ int main(int argc, char **argv)
             }
             else if (pathFlag == 1 && parseFlag == 1)
             {
-                parseSF(myPath);
+                finalParseSF(myPath);
             }
         }
-     
     }
+    free(myPath);
+    free(filter);
     return 0;
 }
