@@ -288,13 +288,86 @@ void extractFrSF(const char *path, int section, int line)
         }
     }
 }
+int gasesteSF(const char *path)
+{
+    int fis = -1;
+    fis = open(path, O_RDONLY);
 
+    lseek(fis, -3, SEEK_END);
+    unsigned short header_size;
+    read(fis, &header_size, 2);
+    lseek(fis, -header_size + 2, SEEK_END);
+
+    unsigned char no_sect;
+    read(fis, &no_sect, 1);
+
+    char sect_name[6];
+    unsigned short sect_type;
+    int sect_size, sect_offset;
+
+    for (int i = 0; i < no_sect; i++)
+    {
+        read(fis, sect_name, 6);
+        read(fis, &sect_type, 2);
+        read(fis, &sect_offset, 4);
+        read(fis, &sect_size, 4);
+
+        lseek(fis, sect_offset, SEEK_SET);
+        char c;
+        int nrLinie = 0, j = 0;
+
+        while (j < sect_size)
+        {
+            read(fis, &c, 1);
+            if (c == '\n')
+            {
+                nrLinie++;
+            }
+            if (nrLinie > 13)
+            {
+                return 1;
+            }
+        }
+    }
+    return -1;
+}
+void findallSFs(const char *path)
+{
+    DIR *dir = opendir(path);
+    struct dirent *entry = readdir(dir);
+    char fullPath[512];
+    struct stat statbuf;
+    while (entry != NULL)
+    {
+        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0)
+        {
+            snprintf(fullPath, 512, "%s/%s", path, entry->d_name);
+            if (lstat(fullPath, &statbuf) == 0)
+            {
+                if (S_ISREG(statbuf.st_mode))
+                {
+                    if (parseSF(fullPath, 1) == 1)
+                    {
+                        if (gasesteSF(fullPath) == 1)
+                            printf("%s\n", fullPath);
+                    }
+                }
+                else if (S_ISDIR(statbuf.st_mode))
+                {
+                    findallSFs(fullPath);
+                }
+            }
+        }
+        entry = readdir(dir);
+    }
+    closedir(dir);
+}
 
 int main(int argc, char **argv)
 {
     int recursiveFlag = 0, pathFlag = 0, filterStrFlag = 0, listFlag = 0, filterFlag = 0, parseFlag = 0;
     char *myPath = NULL, *filter = NULL;
-    int line, section, extractFlag = 0, lineFlag = 0, sectionFlag = 0;
+    int line, section, extractFlag = 0, lineFlag = 0, sectionFlag = 0, findFlag;
 
     if (argc >= 2)
     {
@@ -347,11 +420,28 @@ int main(int argc, char **argv)
                 sscanf(argv[i], "line=%d", &line);
                 lineFlag = 1;
             }
-
+            else if (strcmp(argv[i], "findall") == 0)
+            {
+                findFlag = 1;
+            }
         }
         if (extractFlag == 1 && pathFlag == 1 && lineFlag == 1 && sectionFlag == 1)
         {
             extractFrSF(myPath, section, line);
+        }
+        else if (findFlag == 1 && pathFlag == 1)
+        {
+            DIR *nouDir = opendir(myPath);
+            if (nouDir == NULL)
+            {
+                printf("ERROR\ninvalid directory path");
+            }
+            else
+            {
+                printf("SUCCESS\n");
+                findallSFs(myPath);
+            }
+            free(nouDir);
         }
         else if (recursiveFlag == 1)
         {
