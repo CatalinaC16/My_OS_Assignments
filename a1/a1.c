@@ -4,128 +4,152 @@
 #include <stdlib.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <unistd.h>
 #include <dirent.h>
 #include <fcntl.h>
 
-// LISTARE RECURSIVA
+// LISTARE RECURSIVA atat cu cat si fara filtru in functie de flag-urile de filtre
+/// atunci cand sunt SETATE pe 1
 
 void listRecFilter(const char *path, char *filStart, int filterStr, int filterPerm)
 {
-    DIR *dir = opendir(path);
-    struct dirent *entry = readdir(dir);
-    char fullPath[512];
-    struct stat statbuf;
-    while (entry != NULL)
+    struct stat metaDate;                                /// este nevoie de o variabila in care sa pun metadatele fisierului
+    DIR *director = opendir(path);                       /// deschid directorul curent, nu e nevoie sa il mai testez ca l-am testat in main sa nu fie NULL
+    struct dirent *director_content = readdir(director); /// citesc primul element din folder ca sa intru in while
+    char exactPath[1000];                                /// declar o dimensiune maxima a path-ului
+
+    /// parcurg directorul cat timp exista elemente
+    while (director_content != NULL)
     {
-        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0)
+        /// nu mergem ooe curent/parinte pentru ca se face loop infinit
+        if (strcmp(director_content->d_name, ".") != 0 && strcmp(director_content->d_name, "..") != 0)
         {
-            snprintf(fullPath, 512, "%s/%s", path, entry->d_name);
-            if (lstat(fullPath, &statbuf) == 0)
+            // stabilesc calea completa
+            snprintf(exactPath, 1000, "%s/%s", path, director_content->d_name);
+            /// citesc metadatele
+            if (lstat(exactPath, &metaDate) == 0)
             {
                 if (filterStr == 1)
                 {
-                    if (strncmp(entry->d_name, filStart, strlen(filStart)) == 0)
+                    /// numele trebuie sa inceapa cu secventa de caractere primita in argument
+                    if (strncmp(director_content->d_name, filStart, strlen(filStart)) == 0)
                     {
-                        printf("%s\n", fullPath);
+                        printf("%s\n", exactPath);
                     }
                 }
                 else if (filterPerm == 1)
                 {
-                    if (statbuf.st_mode & S_IXUSR)
+                    /// elementul trebuie sa aiba permisiunea de executie pentru owner, extrag bitul de permisiune de executie pentru owner
+                    if (metaDate.st_mode & S_IXUSR)
                     {
-                        printf("%s\n", fullPath);
+                        printf("%s\n", exactPath);
                     }
                 }
                 if (filterStr == 0 && filterPerm == 0)
                 {
-                    printf("%s\n", fullPath);
+                    /// parcurgere recursiva fara filtre
+                    printf("%s\n", exactPath);
                 }
 
-                if (S_ISDIR(statbuf.st_mode))
+                if (S_ISDIR(metaDate.st_mode))
                 {
-                    listRecFilter(fullPath, filStart, filterStr, filterPerm);
+                    /// in cazul in care trebuie sa mergem in adangime, avem folder
+                    listRecFilter(exactPath, filStart, filterStr, filterPerm);
                 }
             }
         }
-        entry = readdir(dir);
+        /// citesc urmatorul element din directorul curent
+        director_content = readdir(director);
     }
-    closedir(dir);
+    /// inchid directorul curent
+    closedir(director);
 }
 
-// LISTARE NORMALA
+// LISTARE NORMALA cu si fara filtre, in functie de flag-urile de filtre
 
 void listFilter(const char *path, char *filStart, int filterStr, int filterPerm)
 {
-    char fullPath[512];
-    struct stat statbuf;
-    DIR *dir = opendir(path);
-    if (dir == NULL)
+    struct stat metaDate; /// metadatele fisierului
+    char exactPath[1000];
+    /// deschid directorul curent
+    DIR *director = opendir(path);
+    if (director == NULL)
     {
         printf("ERROR\ninvalid directory path");
         return;
     }
     printf("SUCCESS\n");
-    struct dirent *entry = readdir(dir);
-    while (entry != NULL)
+    struct dirent *director_content = readdir(director); /// primul element din folder-ul deschis
+    while (director_content != NULL)
     {
-        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0)
+        /// parcurg folder-ul pana nu mai are elemente si nu merg pe parinte sau curent
+        if (strcmp(director_content->d_name, ".") != 0 && strcmp(director_content->d_name, "..") != 0)
         {
+            snprintf(exactPath, 1000, "%s/%s", path, director_content->d_name);
             if (filterStr == 1)
             {
-                if (strncmp(entry->d_name, filStart, strlen(filStart)) == 0)
+                /// numele trebuie sa inceapa cu secventa de caractere primita in argument
+                if (strncmp(director_content->d_name, filStart, strlen(filStart)) == 0)
                 {
-                    printf("%s/%s\n", path, entry->d_name);
+                    printf("%s\n", exactPath);
                 }
             }
             else if (filterPerm == 1)
             {
-                snprintf(fullPath, 512, "%s/%s", path, entry->d_name);
-                if (lstat(fullPath, &statbuf) == 0)
+                /// elementul trebuie sa aiba permisiunea de executie pentru owner, extrag bitul de permisiune de executie pentru owner
+                if (lstat(exactPath, &metaDate) == 0)
                 {
-                    if (statbuf.st_mode & S_IXUSR)
+                    if (metaDate.st_mode & S_IXUSR)
                     {
-                        printf("%s/%s\n", path, entry->d_name);
+                        printf("%s\n", exactPath);
                     }
                 }
             }
             if (filterPerm == 0 && filterStr == 0)
             {
-                printf("%s/%s\n", path, entry->d_name);
+                /// listare normala fara filtre
+                printf("%s\n", exactPath);
             }
         }
-        entry = readdir(dir);
+
+        /// citesc urmatorul element din folder
+        director_content = readdir(director);
     }
-    closedir(dir);
+    /// inchid directorul la sfarsit
+    closedir(director);
 }
 
-// PARSE
+// PARSE a fisierului SF
 int parseSF(const char *path, int extr)
 {
     int fis = -1;
     fis = open(path, O_RDONLY);
     if (fis == -1)
     {
+        /// fisierul nu a fost deschis
         return -1;
     }
 
+    /// 3 octeti in spate de la sfarsitul fisierului ca sa citesc dimensiunea header-ului, care e pe 2 octeti
     lseek(fis, -3, SEEK_END);
-    unsigned short header_size;
-    read(fis, &header_size, 2);
+    unsigned short header_dimensionB;
+    read(fis, &header_dimensionB, 2);
 
-    char magic;
-    read(fis, &magic, 1);
-    if (magic != 'M')
+    /// urmatoarea valoare e a magic-ului, pe 1 octet
+    char magic_val;
+    read(fis, &magic_val, 1);
+    if (magic_val != 'M')
     {
+        /// nu e SF, pentru ca magic nu este M
         return -2;
     }
 
-    lseek(fis, -header_size, SEEK_END);
+    lseek(fis, -header_dimensionB, SEEK_END); /// ma duc la inceputul header-ului si citesc version,nr de sectiuni si informatii sectiuni
 
     unsigned short version = 0;
     read(fis, &version, 2);
     if (version < 83 || version > 107)
     {
+        /// nu e SF, pentru ca version NU este in intervalul [83,107]
         return -3;
     }
 
@@ -133,29 +157,35 @@ int parseSF(const char *path, int extr)
     read(fis, &no_sect, 1);
     if (no_sect < 2 || no_sect > 20)
     {
+        /// nu e SF, pentru ca nr de sectiuni NU este in intervalul [2,20]
         return -4;
     }
 
-    char sect_name[6];
+    char sect_name[7];
     unsigned short sect_type;
     int sect_size, sect_offset;
     for (int i = 0; i < no_sect; i++)
     {
-        read(fis, sect_name, 6);
-        read(fis, &sect_type, 2);
-        read(fis, &sect_offset, 4);
-        read(fis, &sect_size, 4);
+        read(fis, sect_name, 6); /// 6 octeti pentru nume sectiune
+        sect_name[6] = '\0';
+        read(fis, &sect_type, 2);   /// 2 octeti pentru tipul sectiunii
+        read(fis, &sect_offset, 4); /// 4 octeti pentru offset-ul sectiunii
+        read(fis, &sect_size, 4);   /// 4 octeti pentru dimensiunea sectiunii
         if (sect_type != 89 && sect_type != 47 && sect_type != 86)
         {
+            /// nu e SF, pentru ca valorile valide sunt 89  sau 47 sau 86
             return -5;
         }
     }
-    lseek(fis, -header_size, SEEK_END);
-    lseek(fis, 3, SEEK_CUR);
+    /// acum printez informatiile despre header si sectiuni
+    lseek(fis, -header_dimensionB + 3, SEEK_END);
     if (extr == 0)
     {
+        /// am declarat 2 siruri, la care am adaugat versiunea si nr de sectiuni ca sa printeze corect valorile
         char versionString[10];
+        memset(versionString, 0, 10);
         char noSectString[10];
+        memset(noSectString, 0, 10);
 
         sprintf(versionString, "%hu", version);
         sprintf(noSectString, "%d", no_sect);
@@ -163,43 +193,51 @@ int parseSF(const char *path, int extr)
         printf("SUCCESS\n");
         printf("version=%s\n", versionString);
         printf("nr_sections=%s\n", noSectString);
-        for (int i = 0; i < no_sect; i++)
+        for (int k = 0; k < no_sect; k++)
         {
-            int size = read(fis, sect_name, 6);
-            sect_name[size] = '\0';
+            read(fis, sect_name, 6);
+            sect_name[6] = '\0';
             read(fis, &sect_type, 2);
             read(fis, &sect_offset, 4);
             read(fis, &sect_size, 4);
-            printf("section%d: %s %hu %d\n", i + 1, sect_name, sect_type, sect_size);
+            printf("section%d: %s %hu %d\n", k + 1, sect_name, sect_type, sect_size); /// printez valorile in forma dorita
         }
     }
+    /// inchid fisierul si returnez 1, oentru ca este un fisier SF
     close(fis);
     return 1;
 }
+
 void finalParseSF(const char *path)
 {
     int result = parseSF(path, 0);
     if (result == -1)
     {
+        /// nu se poate deschide fisierul
         printf("ERROR\ninvalid file");
     }
     else if (result == -2)
     {
+        /// magicul nu respecta cerinta SF-ului
         printf("ERROR\nwrong magic");
     }
     else if (result == -3)
     {
+        /// versiunea nu respecta cerinta SF-ului
         printf("ERROR\nwrong version");
     }
     else if (result == -4)
     {
+        /// nr de sectiune nu respecta cerinta SF-ului
         printf("ERROR\nwrong sect_nr");
     }
     else if (result == -5)
     {
+        /// tipul sectiunii nu este conform cerintei
         printf("ERROR\nwrong sect_types");
     }
 }
+
 void extractFrSF(const char *path, int section, int line)
 {
     if (parseSF(path, 1) != 1)
@@ -208,7 +246,7 @@ void extractFrSF(const char *path, int section, int line)
         return;
     }
 
-    int fis = open(path, O_RDONLY);
+    int fis = open(path, O_RDONLY); /// nu mai trebuie sa verific fis ca l-am verificat in parse
 
     lseek(fis, -3, SEEK_END);
     unsigned short header_size;
@@ -223,16 +261,17 @@ void extractFrSF(const char *path, int section, int line)
     unsigned char no_sect;
     read(fis, &no_sect, 1);
 
-    char sect_name[6];
+    char sect_name[7];
     unsigned short sect_type;
     int sect_size, sect_offset;
-    if (no_sect < section || section == 0)
+    if (no_sect < section || section <= 0)
     {
         printf("ERROR\ninvalid section");
         return;
     }
     for (int i = 0; i < no_sect; i++)
     {
+        /// parcurg intai informatiile despre sectiune si dupa merg in body la offset-ul sectiunii
         read(fis, sect_name, 6);
         read(fis, &sect_type, 2);
         read(fis, &sect_offset, 4);
@@ -240,12 +279,13 @@ void extractFrSF(const char *path, int section, int line)
 
         if ((i + 1) == section)
         {
+            /// daca sectiunea coincide cu valoarea primita, duc cursorul la offset-ul sectiunii
             lseek(fis, sect_offset, SEEK_SET);
             char c;
             int nrLinie = 0, lungimeLinie, j = 0, start = -1;
 
             while (j < sect_size)
-            {
+            { ///  cat timp j mai mic decat dimensiunea sectiunii
                 read(fis, &c, 1);
                 if (c == '\n')
                 {
@@ -253,21 +293,22 @@ void extractFrSF(const char *path, int section, int line)
                     if (line == nrLinie)
                     {
                         lungimeLinie = j - start;
-                        char *linie = (char *)malloc(sizeof(char) * lungimeLinie);
-                        lseek(fis, sect_offset + start, SEEK_SET);
+                        char *linie = (char *)malloc(sizeof(char) * (lungimeLinie + 1));
+                        lseek(fis, sect_offset + start + 1, SEEK_SET);
                         read(fis, linie, lungimeLinie);
                         linie[lungimeLinie] = '\0';
                         printf("SUCCESS\n");
-                        for (int k = lungimeLinie - 1; k >= 0; k--)
+
+                        for (int k = lungimeLinie - 2; k >= 0; k--)
                         {
                             printf("%c", linie[k]);
                         }
+
                         free(linie);
                         return;
                     }
                     start = j;
                 }
-
                 j++;
             }
             if (nrLinie + 1 == line)
@@ -333,34 +374,34 @@ int gasesteSF(const char *path)
 }
 void findallSFs(const char *path)
 {
-    DIR *dir = opendir(path);
-    struct dirent *entry = readdir(dir);
-    char fullPath[512];
-    struct stat statbuf;
-    while (entry != NULL)
+    DIR *director = opendir(path);
+    struct dirent *director_content = readdir(director);
+    char exactPath[1000];
+    struct stat metaDate;
+    while (director_content != NULL)
     {
-        if (strcmp(entry->d_name, ".") != 0 && strcmp(entry->d_name, "..") != 0)
+        if (strcmp(director_content->d_name, ".") != 0 && strcmp(director_content->d_name, "..") != 0)
         {
-            snprintf(fullPath, 512, "%s/%s", path, entry->d_name);
-            if (lstat(fullPath, &statbuf) == 0)
+            snprintf(exactPath, 1000, "%s/%s", path, director_content->d_name);
+            if (lstat(exactPath, &metaDate) == 0)
             {
-                if (S_ISREG(statbuf.st_mode))
+                if (S_ISREG(metaDate.st_mode))
                 {
-                    if (parseSF(fullPath, 1) == 1)
+                    if (parseSF(exactPath, 1) == 1)
                     {
-                        if (gasesteSF(fullPath) == 1)
-                            printf("%s\n", fullPath);
+                        if (gasesteSF(exactPath) == 1)
+                            printf("%s\n", exactPath);
                     }
                 }
-                else if (S_ISDIR(statbuf.st_mode))
+                else if (S_ISDIR(metaDate.st_mode))
                 {
-                    findallSFs(fullPath);
+                    findallSFs(exactPath);
                 }
             }
         }
-        entry = readdir(dir);
+        director_content = readdir(director);
     }
-    closedir(dir);
+    closedir(director);
 }
 
 int main(int argc, char **argv)
@@ -447,8 +488,8 @@ int main(int argc, char **argv)
         {
             if (listFlag == 1 && pathFlag == 1)
             {
-                DIR *nouDir = opendir(myPath);
-                if (nouDir == NULL)
+                DIR *nouDir2 = opendir(myPath);
+                if (nouDir2 == NULL)
                 {
                     printf("ERROR\ninvalid directory path");
                 }
@@ -457,7 +498,7 @@ int main(int argc, char **argv)
                     printf("SUCCESS\n");
                     listRecFilter(myPath, filter, filterStrFlag, filterFlag);
                 }
-                free(nouDir);
+                free(nouDir2);
             }
         }
         else
