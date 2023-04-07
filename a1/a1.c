@@ -248,13 +248,13 @@ void extractFrSF(const char *path, int section, int line)
 
     int fis = open(path, O_RDONLY); /// nu mai trebuie sa verific fis ca l-am verificat in parse
 
-    lseek(fis, -3, SEEK_END);
+    lseek(fis, -3, SEEK_END); /// cu 3 octeti in spate de la sfarsitul fisierului
     unsigned short header_size;
-    read(fis, &header_size, 2);
+    read(fis, &header_size, 2); /// citesc dimensiunea headerului de 2 octeti
 
     char magic;
-    read(fis, &magic, 1);
-    lseek(fis, -header_size, SEEK_END);
+    read(fis, &magic, 1);               /// citesc apoi magic-ul de 1 octet
+    lseek(fis, -header_size, SEEK_END); /// merg la inceputul header-ului
 
     unsigned short version = 0;
     read(fis, &version, 2);
@@ -289,18 +289,24 @@ void extractFrSF(const char *path, int section, int line)
                 read(fis, &c, 1);
                 if (c == '\n')
                 {
+                    /// a gasit un \n care indica o linie
                     nrLinie++;
                     if (line == nrLinie)
                     {
+                        /// daca este linia cautata, atunci stabilim lunigimea liniei ca  diferenta dintre
+                        /// pozitia la care se afla cursorul si de unde a inceput linia
                         lungimeLinie = j - start;
                         char *linie = (char *)malloc(sizeof(char) * (lungimeLinie + 1));
+                        /// am setat cursorul fisierului de la inceputul sectiunii plus nr de octeti pana la startul linie plus 1
                         lseek(fis, sect_offset + start + 1, SEEK_SET);
+                        /// citesc o linie
                         read(fis, linie, lungimeLinie);
                         linie[lungimeLinie] = '\0';
                         printf("SUCCESS\n");
 
                         for (int k = lungimeLinie - 2; k >= 0; k--)
                         {
+                            /// scriu linia inversata
                             printf("%c", linie[k]);
                         }
 
@@ -311,6 +317,7 @@ void extractFrSF(const char *path, int section, int line)
                 }
                 j++;
             }
+            /// aici este cazul in care linia cautata este ultima linie care nu e delimitata de \n, si continua cu octetii aceia de umplutura dintre sectiuni
             if (nrLinie + 1 == line)
             {
                 lungimeLinie = j - start;
@@ -321,6 +328,7 @@ void extractFrSF(const char *path, int section, int line)
                 printf("SUCCESS\n");
                 for (int k = lungimeLinie - 1; k >= 0; k--)
                 {
+                    /// scriu linia inversata
                     printf("%c", linie[k]);
                 }
                 free(linie);
@@ -332,17 +340,17 @@ void extractFrSF(const char *path, int section, int line)
 int gasesteSF(const char *path)
 {
     int fis = -1;
-    fis = open(path, O_RDONLY);
+    fis = open(path, O_RDONLY); /// deschid fisierul
 
     lseek(fis, -3, SEEK_END);
     unsigned short header_size;
-    read(fis, &header_size, 2);
+    read(fis, &header_size, 2); /// citesc dimensiunea header-ului
     lseek(fis, -header_size + 2, SEEK_END);
 
     unsigned char no_sect;
-    read(fis, &no_sect, 1);
+    read(fis, &no_sect, 1); /// citesc numarul de sectiuni
 
-    char sect_name[6];
+    char sect_name[7];
     unsigned short sect_type;
     int sect_size, sect_offset;
 
@@ -352,23 +360,30 @@ int gasesteSF(const char *path)
         read(fis, &sect_type, 2);
         read(fis, &sect_offset, 4);
         read(fis, &sect_size, 4);
+        off_t pos = lseek(fis, 0, SEEK_CUR);
 
-        lseek(fis, sect_offset, SEEK_SET);
         char c;
         int nrLinie = 0, j = 0;
+        lseek(fis, sect_offset, SEEK_SET);
 
         while (j < sect_size)
         {
             read(fis, &c, 1);
             if (c == '\n')
             {
-                nrLinie++;
+                ++nrLinie;
             }
-            if (nrLinie > 13)
+            if (nrLinie >= 13)
             {
                 return 1;
             }
+            j++;
         }
+        if (nrLinie + 1 >= 13)
+        {
+            return 1;
+        }
+        lseek(fis, pos, SEEK_SET);
     }
     return -1;
 }
@@ -385,15 +400,14 @@ void findallSFs(const char *path)
             snprintf(exactPath, 1000, "%s/%s", path, director_content->d_name);
             if (lstat(exactPath, &metaDate) == 0)
             {
-                if (S_ISREG(metaDate.st_mode))
+
+                if (parseSF(exactPath, 1) == 1)
                 {
-                    if (parseSF(exactPath, 1) == 1)
-                    {
-                        if (gasesteSF(exactPath) == 1)
-                            printf("%s\n", exactPath);
-                    }
+                    if (gasesteSF(exactPath) == 1)
+                        printf("%s\n", exactPath);
                 }
-                else if (S_ISDIR(metaDate.st_mode))
+
+                if (S_ISDIR(metaDate.st_mode))
                 {
                     findallSFs(exactPath);
                 }
