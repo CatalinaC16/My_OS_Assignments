@@ -7,7 +7,7 @@
 #include <dirent.h>
 #include <fcntl.h>
 
-// LISTARE RECURSIVA atat cu cat si fara filtru in functie de flag-urile de filtre
+/// LISTARE RECURSIVA atat cu cat si fara filtru in functie de flag-urile de filtre
 /// atunci cand sunt SETATE pe 1
 
 void listRecFilter(const char *path, char *filStart, int filterStr, int filterPerm)
@@ -70,8 +70,7 @@ void listFilter(const char *path, char *filStart, int filterStr, int filterPerm)
 {
     struct stat metaDate; /// metadatele fisierului
     char exactPath[1000];
-    /// deschid directorul curent
-    DIR *director = opendir(path);
+    DIR *director = opendir(path); /// deschid directorul curent
     if (director == NULL)
     {
         printf("ERROR\ninvalid directory path");
@@ -140,6 +139,7 @@ int parseSF(const char *path, int extr)
     if (magic_val != 'M')
     {
         /// nu e SF, pentru ca magic nu este M
+        close(fis);
         return -2;
     }
 
@@ -150,6 +150,7 @@ int parseSF(const char *path, int extr)
     if (version < 83 || version > 107)
     {
         /// nu e SF, pentru ca version NU este in intervalul [83,107]
+        close(fis);
         return -3;
     }
 
@@ -158,12 +159,13 @@ int parseSF(const char *path, int extr)
     if (no_sect < 2 || no_sect > 20)
     {
         /// nu e SF, pentru ca nr de sectiuni NU este in intervalul [2,20]
+        close(fis);
         return -4;
     }
 
-    char sect_name[7];
-    unsigned short sect_type;
-    int sect_size, sect_offset;
+    char sect_name[7];          // 7 octeti si pentru \0
+    unsigned short sect_type;   // 2 octeti
+    int sect_size, sect_offset; // 4 octeti
     for (int i = 0; i < no_sect; i++)
     {
         read(fis, sect_name, 6); /// 6 octeti pentru nume sectiune
@@ -174,11 +176,14 @@ int parseSF(const char *path, int extr)
         if (sect_type != 89 && sect_type != 47 && sect_type != 86)
         {
             /// nu e SF, pentru ca valorile valide sunt 89  sau 47 sau 86
+            close(fis);
             return -5;
         }
     }
     /// acum printez informatiile despre header si sectiuni
     lseek(fis, -header_dimensionB + 3, SEEK_END);
+    /// am pus un flag ca sa pot folosi functia si ca verificare a unui fisier SF, cand e pe 0 atunci printez
+    /// informatiile despre sectiuni, altfel nu si functia functioneaza numai ca verifivcator fisier SF
     if (extr == 0)
     {
         /// am declarat 2 siruri, la care am adaugat versiunea si nr de sectiuni ca sa printeze corect valorile
@@ -195,6 +200,7 @@ int parseSF(const char *path, int extr)
         printf("nr_sections=%s\n", noSectString);
         for (int k = 0; k < no_sect; k++)
         {
+            /// citesc informatiile despre sectiuni
             read(fis, sect_name, 6);
             sect_name[6] = '\0';
             read(fis, &sect_type, 2);
@@ -203,38 +209,33 @@ int parseSF(const char *path, int extr)
             printf("section%d: %s %hu %d\n", k + 1, sect_name, sect_type, sect_size); /// printez valorile in forma dorita
         }
     }
-    /// inchid fisierul si returnez 1, oentru ca este un fisier SF
     close(fis);
     return 1;
 }
 
 void finalParseSF(const char *path)
 {
-    int result = parseSF(path, 0);
-    if (result == -1)
+    /// in cazul in care este SF, printarea informatiiilor are loc in parseSF
+    int nu_esteSF = parseSF(path, 0);
+    if (nu_esteSF == -1)
     {
-        /// nu se poate deschide fisierul
-        printf("ERROR\ninvalid file");
+        printf("ERROR\ninvalid file"); /// nu se poate deschide fisierul
     }
-    else if (result == -2)
+    else if (nu_esteSF == -2)
     {
-        /// magicul nu respecta cerinta SF-ului
-        printf("ERROR\nwrong magic");
+        printf("ERROR\nwrong magic"); /// magicul nu respecta cerinta SF-ului
     }
-    else if (result == -3)
+    else if (nu_esteSF == -3)
     {
-        /// versiunea nu respecta cerinta SF-ului
-        printf("ERROR\nwrong version");
+        printf("ERROR\nwrong version"); /// versiunea nu respecta cerinta SF-ului
     }
-    else if (result == -4)
+    else if (nu_esteSF == -4)
     {
-        /// nr de sectiune nu respecta cerinta SF-ului
-        printf("ERROR\nwrong sect_nr");
+        printf("ERROR\nwrong sect_nr"); /// nr de sectiune nu respecta cerinta SF-ului
     }
-    else if (result == -5)
+    else if (nu_esteSF == -5)
     {
-        /// tipul sectiunii nu este conform cerintei
-        printf("ERROR\nwrong sect_types");
+        printf("ERROR\nwrong sect_types"); /// tipul sectiunii nu este conform cerintei
     }
 }
 
@@ -256,17 +257,18 @@ void extractFrSF(const char *path, int section, int line)
     read(fis, &magic, 1);               /// citesc apoi magic-ul de 1 octet
     lseek(fis, -header_size, SEEK_END); /// merg la inceputul header-ului
 
-    unsigned short version = 0;
+    unsigned short version = 0; /// citesc version si nr de sectiuni
     read(fis, &version, 2);
     unsigned char no_sect;
     read(fis, &no_sect, 1);
 
-    char sect_name[7];
-    unsigned short sect_type;
-    int sect_size, sect_offset;
+    char sect_name[7];          // 7 octeti si pentru \0
+    unsigned short sect_type;   // 2 octeti
+    int sect_size, sect_offset; // 4 octeti
     if (no_sect < section || section <= 0)
     {
-        printf("ERROR\ninvalid section");
+        printf("ERROR\ninvalid section"); /// in cazul in care nr de sectiuni este mai mic decat cel cerut sau daca sectiunea este mai mica sau egala cu 0, sect incep de la 1
+        close(fis);
         return;
     }
     for (int i = 0; i < no_sect; i++)
@@ -277,6 +279,7 @@ void extractFrSF(const char *path, int section, int line)
         read(fis, &sect_offset, 4);
         read(fis, &sect_size, 4);
 
+        // numarul de sectiuni incepe de la 1
         if ((i + 1) == section)
         {
             /// daca sectiunea coincide cu valoarea primita, duc cursorul la offset-ul sectiunii
@@ -285,7 +288,7 @@ void extractFrSF(const char *path, int section, int line)
             int nrLinie = 0, lungimeLinie, j = 0, start = -1;
 
             while (j < sect_size)
-            { ///  cat timp j mai mic decat dimensiunea sectiunii
+            { ///  cat timp j mai mic decat dimensiunea sectiunii, citesc caracter cu caracter sect_size caractere
                 read(fis, &c, 1);
                 if (c == '\n')
                 {
@@ -293,33 +296,34 @@ void extractFrSF(const char *path, int section, int line)
                     nrLinie++;
                     if (line == nrLinie)
                     {
-                        /// daca este linia cautata, atunci stabilim lunigimea liniei ca  diferenta dintre
+                        /// daca este linia cautata, atunci stabilim lungimea liniei ca diferenta dintre
                         /// pozitia la care se afla cursorul si de unde a inceput linia
                         lungimeLinie = j - start;
                         char *linie = (char *)malloc(sizeof(char) * (lungimeLinie + 1));
-                        /// am setat cursorul fisierului de la inceputul sectiunii plus nr de octeti pana la startul linie plus 1
                         lseek(fis, sect_offset + start + 1, SEEK_SET);
-                        /// citesc o linie
                         read(fis, linie, lungimeLinie);
                         linie[lungimeLinie] = '\0';
                         printf("SUCCESS\n");
-
                         for (int k = lungimeLinie - 2; k >= 0; k--)
                         {
-                            /// scriu linia inversata
+                            /// printez linia inversata
                             printf("%c", linie[k]);
                         }
 
                         free(linie);
+                        close(fis);
                         return;
                     }
+                    /// dupa fiecare \n start-ul se reseteaza la pozitia unui nou inceput de linie
                     start = j;
                 }
+                /// la fiecare caracter citit
                 j++;
             }
             /// aici este cazul in care linia cautata este ultima linie care nu e delimitata de \n, si continua cu octetii aceia de umplutura dintre sectiuni
             if (nrLinie + 1 == line)
             {
+                /// am aplicat aceeasi metoda ca la liniile delimitate de \n
                 lungimeLinie = j - start;
                 char *linie = (char *)malloc(sizeof(char) * lungimeLinie);
                 lseek(fis, sect_offset + start, SEEK_SET);
@@ -332,6 +336,7 @@ void extractFrSF(const char *path, int section, int line)
                     printf("%c", linie[k]);
                 }
                 free(linie);
+                close(fis);
                 return;
             }
         }
@@ -341,85 +346,106 @@ int gasesteSF(const char *path)
 {
     int fis = -1;
     fis = open(path, O_RDONLY); /// deschid fisierul
-
+    if (fis == -1)
+    {
+        return -1;
+    }
     lseek(fis, -3, SEEK_END);
     unsigned short header_size;
-    read(fis, &header_size, 2); /// citesc dimensiunea header-ului
-    lseek(fis, -header_size + 2, SEEK_END);
+    read(fis, &header_size, 2);             /// citesc dimensiunea header-ului
+    lseek(fis, -header_size + 2, SEEK_END); /// merg direct la numarul de sectiuni, versiunea nu trebuie aici
 
     unsigned char no_sect;
     read(fis, &no_sect, 1); /// citesc numarul de sectiuni
 
-    char sect_name[7];
-    unsigned short sect_type;
-    int sect_size, sect_offset;
+    char sect_name[7];          /// 7 octeti si pentru \0
+    unsigned short sect_type;   /// 2 octeti
+    int sect_size, sect_offset; /// 4 octeti
 
     for (int i = 0; i < no_sect; i++)
     {
-        read(fis, sect_name, 6);
+        read(fis, sect_name, 6); /// citesc informatiile despre sectiune, insa erau necesare numai offset-ul si size-ul
         read(fis, &sect_type, 2);
         read(fis, &sect_offset, 4);
         read(fis, &sect_size, 4);
-        off_t pos = lseek(fis, 0, SEEK_CUR);
+        off_t posHeader = lseek(fis, 0, SEEK_CUR); /// dupa fiecare sectiune la care am luat informatiile, salvez pozitia cursorului ca sa stiu unde am ramas cu cititul
 
         char c;
         int nrLinie = 0, j = 0;
-        lseek(fis, sect_offset, SEEK_SET);
+        lseek(fis, sect_offset, SEEK_SET); /// merg in body la offset-ul sectiunii
 
         while (j < sect_size)
         {
+            /// parcurg caracter cu caracter sectiunea curenta
             read(fis, &c, 1);
             if (c == '\n')
             {
+                /// in cazul in care intalneste \n , avem o noua linie
                 ++nrLinie;
             }
             if (nrLinie >= 13)
             {
+                /// avem cel putin o sectiune cu mai mult de 13 linii
+                close(fis);
                 return 1;
             }
+            /// am mai citit un caracter
             j++;
         }
         if (nrLinie + 1 >= 13)
         {
+            /// cazul in care este ultima linie din sectiune si e urmata de octetii de umplutura dintre sectiuni
+            close(fis);
             return 1;
         }
-        lseek(fis, pos, SEEK_SET);
+        /// revin la informatiile despre urmatoarea sectiune
+        lseek(fis, posHeader, SEEK_SET);
     }
+    close(fis);
     return -1;
 }
+
 void findallSFs(const char *path)
 {
-    DIR *director = opendir(path);
-    struct dirent *director_content = readdir(director);
+    DIR *director = opendir(path);                       /// deschid directorul curent
+    struct dirent *director_content = readdir(director); /// primul element din directorul curent
     char exactPath[1000];
     struct stat metaDate;
     while (director_content != NULL)
     {
+        /// evit sa mearga in directorul curent/parinte ca sa nu faca infinite loop
         if (strcmp(director_content->d_name, ".") != 0 && strcmp(director_content->d_name, "..") != 0)
         {
             snprintf(exactPath, 1000, "%s/%s", path, director_content->d_name);
             if (lstat(exactPath, &metaDate) == 0)
             {
-
-                if (parseSF(exactPath, 1) == 1)
+                if (S_ISREG(metaDate.st_mode))
                 {
-                    if (gasesteSF(exactPath) == 1)
-                        printf("%s\n", exactPath);
+                    /// daca este fisier, atunci verific daca este de tip SF
+                    if (parseSF(exactPath, 1) == 1)
+                    {
+                        /// dupa daca are cel putin o sectiune cu mai mult de 13 linii
+                        if (gasesteSF(exactPath) == 1)
+                        {
+                            printf("%s\n", exactPath);
+                        }
+                    }
                 }
-
-                if (S_ISDIR(metaDate.st_mode))
+                else if (S_ISDIR(metaDate.st_mode))
                 {
-                    findallSFs(exactPath);
+                    findallSFs(exactPath); /// daca e folder merg in adacime
                 }
             }
         }
-        director_content = readdir(director);
+        director_content = readdir(director); /// urmatorul element din folder
     }
     closedir(director);
 }
 
 int main(int argc, char **argv)
 {
+    /// am parcurs argumentele si in cazul in care se regaseau anumite string-uri am setat niste flag-uri la fiecare
+    /// daca erau introduse si anumite valori le citeam precum string-ul de la filtre, linia, sectiunea
     int recursiveFlag = 0, pathFlag = 0, filterStrFlag = 0, listFlag = 0, filterFlag = 0, parseFlag = 0;
     char *myPath = NULL, *filter = NULL;
     int line, section, extractFlag = 0, lineFlag = 0, sectionFlag = 0, findFlag;
@@ -480,12 +506,16 @@ int main(int argc, char **argv)
                 findFlag = 1;
             }
         }
+
+        /// aici am testat flag-urile pentru fiecare cerinta
         if (extractFlag == 1 && pathFlag == 1 && lineFlag == 1 && sectionFlag == 1)
         {
+            /// cerinta cu extract path=%s section=%d line=%d
             extractFrSF(myPath, section, line);
         }
         else if (findFlag == 1 && pathFlag == 1)
         {
+            /// cerinta cu findall path=%s
             DIR *nouDir = opendir(myPath);
             if (nouDir == NULL)
             {
@@ -500,6 +530,7 @@ int main(int argc, char **argv)
         }
         else if (recursiveFlag == 1)
         {
+            /// cerinta cu list recursive <filtre> path=%s
             if (listFlag == 1 && pathFlag == 1)
             {
                 DIR *nouDir2 = opendir(myPath);
@@ -517,12 +548,15 @@ int main(int argc, char **argv)
         }
         else
         {
+
             if (listFlag == 1 && pathFlag == 1)
             {
+                /// cerinta cu list <filtre> path=%s
                 listFilter(myPath, filter, filterStrFlag, filterFlag);
             }
             else if (pathFlag == 1 && parseFlag == 1)
             {
+                ///cerinta cu parse path=%s
                 finalParseSF(myPath);
             }
         }
