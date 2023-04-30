@@ -1,13 +1,24 @@
 #include <stdio.h>
 #include <unistd.h>
 #include <pthread.h>
+#include <fcntl.h>
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <semaphore.h>
 #include <sys/wait.h>
 #include "a2_helper.h"
 
 #define NR_TH 4
+#define NR_THS 37
+
 sem_t sem3, sem4;
+sem_t sem23_52, sem21_52;
+pthread_mutex_t mutexThs, mutexTh12;
+pthread_cond_t varThs, varTh12;
+
+int nrTotalThSimultan = 0;
+int th12Flag = 0;
+
 typedef struct thread_str
 { /// valori pentru functia info
     int proces;
@@ -15,10 +26,63 @@ typedef struct thread_str
 
 } thread_str;
 
-void *thFunc_cr(void *param)
+void *thFunc(void *param)
 {
     thread_str *th = (thread_str *)param;
 
+    pthread_mutex_lock(&mutexThs);
+    while (nrTotalThSimultan >= 6)
+    {
+        pthread_cond_wait(&varThs, &mutexThs);
+    }
+    nrTotalThSimultan++;
+    pthread_mutex_unlock(&mutexThs);
+
+    if (th->threadID == 12)
+    {
+        pthread_mutex_lock(&mutexTh12);
+        while (th12Flag == 0)
+        {
+            pthread_cond_wait(&varTh12, &mutexTh12);
+        }
+        th12Flag = 0;
+        pthread_mutex_unlock(&mutexTh12);
+    }
+    info(BEGIN, th->proces, th->threadID);
+    info(END, th->proces, th->threadID);
+
+    pthread_mutex_lock(&mutexThs);
+    nrTotalThSimultan--;
+    pthread_cond_broadcast(&varThs);
+    pthread_mutex_unlock(&mutexThs);
+
+    pthread_mutex_lock(&mutexTh12);
+    if (nrTotalThSimultan == 5)
+    {
+        th12Flag = 1;
+        pthread_cond_signal(&varTh12);
+    }
+    pthread_mutex_unlock(&mutexTh12);
+
+    return NULL;
+}
+
+void *thFunc_cr(void *param)
+{
+    thread_str *th = (thread_str *)param;
+    if (th->threadID == 1)
+    {
+        info(BEGIN, th->proces, th->threadID);
+        info(END, th->proces, th->threadID);
+    }
+    if (th->threadID == 2)
+    {
+        sem_wait(&sem23_52);
+        info(BEGIN, th->proces, th->threadID);
+        info(END, th->proces, th->threadID);
+
+        sem_post(&sem21_52);
+    }
     if (th->threadID == 3)
     {
         sem_wait(&sem4);
@@ -28,11 +92,34 @@ void *thFunc_cr(void *param)
     }
     else if (th->threadID == 4)
     {
-
         info(BEGIN, th->proces, th->threadID);
         sem_post(&sem4);
         sem_wait(&sem3);
         info(END, th->proces, th->threadID);
+    }
+
+    return NULL;
+}
+
+void *thFunc25(void *param)
+{
+    thread_str *th = (thread_str *)param;
+    if (th->threadID == 1)
+    {
+        sem_wait(&sem21_52);
+        info(BEGIN, th->proces, th->threadID);
+        info(END, th->proces, th->threadID);
+    }
+    else if (th->threadID == 2)
+    {
+        info(BEGIN, th->proces, th->threadID);
+        info(END, th->proces, th->threadID);
+    }
+    else if (th->threadID == 3)
+    {
+        info(BEGIN, th->proces, th->threadID);
+        info(END, th->proces, th->threadID);
+        sem_post(&sem23_52);
     }
     else
     {
@@ -46,14 +133,30 @@ int main(int argc, char **argv)
 {
     thread_str paramThreads[NR_TH];
     pthread_t thread_ids[NR_TH];
+
+    thread_str paramThs[NR_THS];
+    pthread_t threadIDs[NR_THS];
+
+    thread_str paramThread25[NR_TH];
+    pthread_t thread_id25[NR_TH];
+
+    pthread_mutex_init(&mutexThs, NULL);
+    pthread_cond_init(&varThs, NULL);
+
+    pthread_mutex_init(&mutexTh12, NULL);
+    pthread_cond_init(&varTh12, NULL);
+
     sem_init(&sem3, 0, 0);
     sem_init(&sem4, 0, 0);
+    sem_init(&sem21_52, 1, 1);
+    sem_init(&sem23_52, 1, 1);
     init();
     pid_t proc2 = -1, proc3 = -1, proc4 = -1, proc5 = -1, proc6 = -1, proc7 = -1;
     info(BEGIN, 1, 0); // incep p1 - procesul principal
     proc2 = fork();
     if (proc2 == 0)
-    {                      // aici in p2
+    {
+        // aici in p2
         info(BEGIN, 2, 0); // incep p2
         proc4 = fork();
         if (proc4 == 0)
@@ -82,12 +185,34 @@ int main(int argc, char **argv)
             {
                 // aici in p4
                 waitpid(proc5, NULL, 0);
+                for (int i = 0; i < NR_THS; i++)
+                {
+                    paramThs[i].threadID = i + 1;
+                    paramThs[i].proces = 4;
+                    pthread_create(&threadIDs[i], NULL, thFunc, &paramThs[i]);
+                }
+                for (int i = 0; i < NR_THS; i++)
+                {
+                    pthread_join(threadIDs[i], NULL);
+                }
+
                 info(END, 4, 0); // termin p4
             }
         }
         else
         { // aici in p2
             waitpid(proc4, NULL, 0);
+            for (int i = 0; i < NR_TH; i++)
+            {
+                paramThread25[i].threadID = i + 1;
+                paramThread25[i].proces = 2;
+                pthread_create(&thread_id25[i], NULL, thFunc25, &paramThread25[i]);
+            }
+            for (int i = 0; i < NR_TH; i++)
+            {
+                pthread_join(thread_id25[i], NULL);
+            }
+
             info(END, 2, 0); // termin p2
         }
     }
@@ -132,6 +257,13 @@ int main(int argc, char **argv)
             }
         }
     }
-
+    sem_destroy(&sem3);
+    sem_destroy(&sem4);
+    sem_destroy(&sem21_52);
+    sem_destroy(&sem23_52);
+    pthread_mutex_destroy(&mutexThs);
+    pthread_cond_destroy(&varThs);
+    pthread_mutex_destroy(&mutexTh12);
+    pthread_cond_destroy(&varTh12);
     return 0;
 }
