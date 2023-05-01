@@ -7,7 +7,6 @@
 #include <semaphore.h>
 #include <sys/wait.h>
 #include "a2_helper.h"
-
 #define NR_TH 4
 #define NR_THS 37
 
@@ -17,7 +16,7 @@ pthread_mutex_t mutexThs, mutexTh12;
 pthread_cond_t varThs, varTh12;
 
 int nrTotalThSimultan = 0;
-int th12Flag = 0;
+int th12Flag = 0, flg23 = 0;
 
 typedef struct thread_str
 { /// valori pentru functia info
@@ -25,7 +24,62 @@ typedef struct thread_str
     int threadID;
 
 } thread_str;
+void *th23(void *param)
+{
+    thread_str *th = (thread_str *)param;
+    info(BEGIN, th->proces, th->threadID);
+    info(END, th->proces, th->threadID);
+    return NULL;
+}
+void *th21(void *param)
+{
+    thread_str *th = (thread_str *)param;
+    info(BEGIN, th->proces, th->threadID);
+    info(END, th->proces, th->threadID);
+    return NULL;
+}
+void *th52(void *param)
+{
+    thread_str *th = (thread_str *)param;
+    info(BEGIN, th->proces, th->threadID);
+    info(END, th->proces, th->threadID);
+    return NULL;
+}
+void *thFunc_cr(void *param)
+{
+    thread_str *th = (thread_str *)param;
+    if (th->threadID == 3)
+    {
+        sem_wait(&sem4);
+        info(BEGIN, th->proces, th->threadID);
+        info(END, th->proces, th->threadID);
+        sem_post(&sem3);
+    }
+    else if (th->threadID == 4)
+    {
+        info(BEGIN, th->proces, th->threadID);
+        sem_post(&sem4);
+        sem_wait(&sem3);
+        info(END, th->proces, th->threadID);
+    }
+    else
+    {
+        info(BEGIN, th->proces, th->threadID);
+        info(END, th->proces, th->threadID);
+    }
 
+    return NULL;
+}
+
+void *thFuncProc2(void *param)
+{
+    thread_str *th = (thread_str *)param;
+
+    info(BEGIN, th->proces, th->threadID);
+    info(END, th->proces, th->threadID);
+
+    return NULL;
+}
 void *thFunc(void *param)
 {
     thread_str *th = (thread_str *)param;
@@ -66,69 +120,6 @@ void *thFunc(void *param)
 
     return NULL;
 }
-
-void *thFunc_cr(void *param)
-{
-    thread_str *th = (thread_str *)param;
-    if (th->threadID == 1)
-    {
-        info(BEGIN, th->proces, th->threadID);
-        info(END, th->proces, th->threadID);
-    }
-    if (th->threadID == 2)
-    {
-        sem_wait(&sem23_52);
-        info(BEGIN, th->proces, th->threadID);
-        info(END, th->proces, th->threadID);
-
-        sem_post(&sem21_52);
-    }
-    if (th->threadID == 3)
-    {
-        sem_wait(&sem4);
-        info(BEGIN, th->proces, th->threadID);
-        info(END, th->proces, th->threadID);
-        sem_post(&sem3);
-    }
-    else if (th->threadID == 4)
-    {
-        info(BEGIN, th->proces, th->threadID);
-        sem_post(&sem4);
-        sem_wait(&sem3);
-        info(END, th->proces, th->threadID);
-    }
-
-    return NULL;
-}
-
-void *thFunc25(void *param)
-{
-    thread_str *th = (thread_str *)param;
-    if (th->threadID == 1)
-    {
-        sem_wait(&sem21_52);
-        info(BEGIN, th->proces, th->threadID);
-        info(END, th->proces, th->threadID);
-    }
-    else if (th->threadID == 2)
-    {
-        info(BEGIN, th->proces, th->threadID);
-        info(END, th->proces, th->threadID);
-    }
-    else if (th->threadID == 3)
-    {
-        info(BEGIN, th->proces, th->threadID);
-        info(END, th->proces, th->threadID);
-        sem_post(&sem23_52);
-    }
-    else
-    {
-        info(BEGIN, th->proces, th->threadID);
-        info(END, th->proces, th->threadID);
-    }
-
-    return NULL;
-}
 int main(int argc, char **argv)
 {
     thread_str paramThreads[NR_TH];
@@ -146,10 +137,10 @@ int main(int argc, char **argv)
     pthread_mutex_init(&mutexTh12, NULL);
     pthread_cond_init(&varTh12, NULL);
 
-    sem_init(&sem3, 0, 0);
-    sem_init(&sem4, 0, 0);
-    sem_init(&sem21_52, 1, 1);
-    sem_init(&sem23_52, 1, 1);
+    sem_init(&sem3, 1, 0);
+    sem_init(&sem4, 1, 0);
+    //sem_init(&sem21_52, 1, 0);
+   // sem_init(&sem23_52, 1, 0);
     init();
     pid_t proc2 = -1, proc3 = -1, proc4 = -1, proc5 = -1, proc6 = -1, proc7 = -1;
     info(BEGIN, 1, 0); // incep p1 - procesul principal
@@ -158,6 +149,25 @@ int main(int argc, char **argv)
     {
         // aici in p2
         info(BEGIN, 2, 0); // incep p2
+        for (int i = 0; i < NR_TH; i++)
+        {
+            paramThread25[i].threadID = i + 1;
+            paramThread25[i].proces = 2;
+            if (paramThread25[i].threadID == 1)
+            {
+                pthread_create(&thread_id25[i], NULL, th21, &paramThread25[i]);
+            }
+            else if (paramThread25[i].threadID == 3)
+            {
+                pthread_create(&thread_id25[i], NULL, th23, &paramThread25[i]);
+            }
+            else
+                pthread_create(&thread_id25[i], NULL, thFuncProc2, &paramThread25[i]);
+        }
+        for (int i = 0; i < NR_TH; i++)
+        {
+            pthread_join(thread_id25[i], NULL);
+        }
         proc4 = fork();
         if (proc4 == 0)
         {
@@ -171,7 +181,12 @@ int main(int argc, char **argv)
                 {
                     paramThreads[i].threadID = i + 1;
                     paramThreads[i].proces = 5;
-                    pthread_create(&thread_ids[i], NULL, thFunc_cr, &paramThreads[i]);
+                    if (paramThreads[i].threadID == 2)
+                    {
+                        pthread_create(&thread_ids[i], NULL, th52, &paramThreads[i]);
+                    }
+                    else
+                        pthread_create(&thread_ids[i], NULL, thFunc_cr, &paramThreads[i]);
                 }
 
                 for (int i = 0; i < NR_TH; i++)
@@ -202,17 +217,6 @@ int main(int argc, char **argv)
         else
         { // aici in p2
             waitpid(proc4, NULL, 0);
-            for (int i = 0; i < NR_TH; i++)
-            {
-                paramThread25[i].threadID = i + 1;
-                paramThread25[i].proces = 2;
-                pthread_create(&thread_id25[i], NULL, thFunc25, &paramThread25[i]);
-            }
-            for (int i = 0; i < NR_TH; i++)
-            {
-                pthread_join(thread_id25[i], NULL);
-            }
-
             info(END, 2, 0); // termin p2
         }
     }
