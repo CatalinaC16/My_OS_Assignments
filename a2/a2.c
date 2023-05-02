@@ -10,10 +10,10 @@
 #define NR_TH 4
 #define NR_THS 37
 
-sem_t sem3, sem4;
-sem_t sem23_52, sem21_52;
-pthread_mutex_t mutexThs, mutexTh12;
-pthread_cond_t varThs, varTh12;
+sem_t sem3, sem4, sem12;
+sem_t *sem23_52, *sem21_52;
+pthread_mutex_t mutexThs;
+pthread_cond_t varThs;
 
 int nrTotalThSimultan = 0;
 int th12Flag = 0, flg23 = 0;
@@ -29,10 +29,12 @@ void *th23(void *param)
     thread_str *th = (thread_str *)param;
     info(BEGIN, th->proces, th->threadID);
     info(END, th->proces, th->threadID);
+    //sem_post(sem23_52);
     return NULL;
 }
 void *th21(void *param)
 {
+    sem_wait(sem21_52);
     thread_str *th = (thread_str *)param;
     info(BEGIN, th->proces, th->threadID);
     info(END, th->proces, th->threadID);
@@ -40,9 +42,11 @@ void *th21(void *param)
 }
 void *th52(void *param)
 {
+    //sem_wait(sem23_52);
     thread_str *th = (thread_str *)param;
     info(BEGIN, th->proces, th->threadID);
     info(END, th->proces, th->threadID);
+    sem_post(sem21_52);
     return NULL;
 }
 void *thFunc_cr(void *param)
@@ -83,41 +87,29 @@ void *thFuncProc2(void *param)
 void *thFunc(void *param)
 {
     thread_str *th = (thread_str *)param;
-
     pthread_mutex_lock(&mutexThs);
     while (nrTotalThSimultan >= 6)
     {
         pthread_cond_wait(&varThs, &mutexThs);
     }
-    nrTotalThSimultan++;
+    nrTotalThSimultan += 1;
+    if (nrTotalThSimultan == 6)
+    {
+        sem_post(&sem12);
+    }
     pthread_mutex_unlock(&mutexThs);
 
+    info(BEGIN, th->proces, th->threadID);
     if (th->threadID == 12)
     {
-        pthread_mutex_lock(&mutexTh12);
-        while (th12Flag == 0)
-        {
-            pthread_cond_wait(&varTh12, &mutexTh12);
-        }
-        th12Flag = 0;
-        pthread_mutex_unlock(&mutexTh12);
+        sem_wait(&sem12);
     }
-    info(BEGIN, th->proces, th->threadID);
     info(END, th->proces, th->threadID);
 
     pthread_mutex_lock(&mutexThs);
-    nrTotalThSimultan--;
-    pthread_cond_broadcast(&varThs);
+    nrTotalThSimultan -= 1;
+    pthread_cond_signal(&varThs);
     pthread_mutex_unlock(&mutexThs);
-
-    pthread_mutex_lock(&mutexTh12);
-    if (nrTotalThSimultan == 5)
-    {
-        th12Flag = 1;
-        pthread_cond_signal(&varTh12);
-    }
-    pthread_mutex_unlock(&mutexTh12);
-
     return NULL;
 }
 int main(int argc, char **argv)
@@ -134,13 +126,13 @@ int main(int argc, char **argv)
     pthread_mutex_init(&mutexThs, NULL);
     pthread_cond_init(&varThs, NULL);
 
-    pthread_mutex_init(&mutexTh12, NULL);
-    pthread_cond_init(&varTh12, NULL);
-
-    sem_init(&sem3, 1, 0);
-    sem_init(&sem4, 1, 0);
-    //sem_init(&sem21_52, 1, 0);
-   // sem_init(&sem23_52, 1, 0);
+    sem_init(&sem3, 0, 0);
+    sem_init(&sem4, 0, 0);
+    sem_init(&sem12, 0, 0);
+    sem23_52 = sem_open("sem1", O_CREAT|O_EXCL, 0644, 1);
+    sem21_52 = sem_open("sem2", O_CREAT|O_EXCL, 0644, 1);
+    // sem_init(&sem21_52, 1, 0);
+    // sem_init(&sem23_52, 1, 0);
     init();
     pid_t proc2 = -1, proc3 = -1, proc4 = -1, proc5 = -1, proc6 = -1, proc7 = -1;
     info(BEGIN, 1, 0); // incep p1 - procesul principal
@@ -149,6 +141,8 @@ int main(int argc, char **argv)
     {
         // aici in p2
         info(BEGIN, 2, 0); // incep p2
+        sem23_52 = sem_open("sem1", O_RDWR);
+        sem21_52 = sem_open("sem2", O_RDWR);
         for (int i = 0; i < NR_TH; i++)
         {
             paramThread25[i].threadID = i + 1;
@@ -177,6 +171,8 @@ int main(int argc, char **argv)
             {
                 // aici in p5
                 info(BEGIN, 5, 0); // incep p5
+                sem23_52 = sem_open("sem1", O_RDWR);
+                sem21_52 = sem_open("sem2", O_RDWR);
                 for (int i = NR_TH - 1; i >= 0; i--)
                 {
                     paramThreads[i].threadID = i + 1;
@@ -263,11 +259,11 @@ int main(int argc, char **argv)
     }
     sem_destroy(&sem3);
     sem_destroy(&sem4);
-    sem_destroy(&sem21_52);
-    sem_destroy(&sem23_52);
+    sem_destroy(&sem12);
+    sem_destroy(sem21_52);
+    sem_destroy(sem23_52);
     pthread_mutex_destroy(&mutexThs);
     pthread_cond_destroy(&varThs);
-    pthread_mutex_destroy(&mutexTh12);
-    pthread_cond_destroy(&varTh12);
+
     return 0;
 }
