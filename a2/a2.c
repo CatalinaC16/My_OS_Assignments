@@ -29,12 +29,12 @@ void *th23(void *param)
     thread_str *th = (thread_str *)param;
     info(BEGIN, th->proces, th->threadID);
     info(END, th->proces, th->threadID);
-    //sem_post(sem23_52);
+    sem_post(sem23_52);
     return NULL;
 }
 void *th21(void *param)
 {
-    sem_wait(sem21_52);
+    // sem_wait(sem21_52);
     thread_str *th = (thread_str *)param;
     info(BEGIN, th->proces, th->threadID);
     info(END, th->proces, th->threadID);
@@ -42,7 +42,7 @@ void *th21(void *param)
 }
 void *th52(void *param)
 {
-    //sem_wait(sem23_52);
+    sem_wait(sem23_52);
     thread_str *th = (thread_str *)param;
     info(BEGIN, th->proces, th->threadID);
     info(END, th->proces, th->threadID);
@@ -129,8 +129,8 @@ int main(int argc, char **argv)
     sem_init(&sem3, 0, 0);
     sem_init(&sem4, 0, 0);
     sem_init(&sem12, 0, 0);
-    sem23_52 = sem_open("sem1", O_CREAT|O_EXCL, 0644, 1);
-    sem21_52 = sem_open("sem2", O_CREAT|O_EXCL, 0644, 1);
+    sem23_52 = sem_open("sem1", O_CREAT | O_EXCL, 0644, 0);
+    sem21_52 = sem_open("sem2", O_CREAT | O_EXCL, 0644, 0);
     // sem_init(&sem21_52, 1, 0);
     // sem_init(&sem23_52, 1, 0);
     init();
