@@ -257,6 +257,7 @@ int main(int argc, char **argv)
             }
         }
     }
+    
     sem_destroy(&sem3);
     sem_destroy(&sem4);
     sem_destroy(&sem12);
