@@ -192,6 +192,7 @@ int main(int argc, char **argv)
             {
                 pthread_join(thread_id25[i], NULL);
             }
+            
             info(END, 2, 0); // termin p2
         }
     }
