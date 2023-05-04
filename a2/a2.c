@@ -30,9 +30,7 @@ void *thFuncProc2(void *param)
     thread_str *th = (thread_str *)param;
     if (th->threadID == 1)
     {
-        printf("aici %d",th->threadID);
         sem_wait(sem21_52);
-         printf("aici %d",th->threadID);
         info(BEGIN, th->proces, th->threadID);
         info(END, th->proces, th->threadID);
     }
@@ -128,7 +126,8 @@ int main(int argc, char **argv)
     sem_init(&sem3, 0, 0);
     sem_init(&sem4, 0, 0);
     sem_init(&sem12, 0, 0);
-
+    sem_unlink("sem1");
+    sem_unlink("sem2");
     sem23_52 = sem_open("sem1", O_CREAT, 0644, 0);
     sem21_52 = sem_open("sem2", O_CREAT, 0644, 0);
     pid_t proc2 = -1, proc3 = -1, proc4 = -1, proc5 = -1, proc6 = -1, proc7 = -1;
@@ -138,13 +137,13 @@ int main(int argc, char **argv)
     {
         // aici in p2
         info(BEGIN, 2, 0); // incep p2
-        for (int i = NR_TH - 1; i >= 0; i--)
+        for (int i = 0; i < NR_TH; i++)
         {
             paramThread25[i].threadID = i + 1;
             paramThread25[i].proces = 2;
             pthread_create(&thread_id25[i], NULL, thFuncProc2, &paramThread25[i]);
         }
-     
+
         proc4 = fork(); // procesul 4
         if (proc4 == 0)
         {
@@ -154,7 +153,7 @@ int main(int argc, char **argv)
             {
                 // aici in p5
                 info(BEGIN, 5, 0); // incep p5
-                for (int i = NR_TH - 1; i >= 0; i--)
+                for (int i = 0; i < NR_TH; i++)
                 {
                     paramThreads[i].threadID = i + 1;
                     paramThreads[i].proces = 5;
@@ -172,7 +171,7 @@ int main(int argc, char **argv)
             {
                 // aici in p4
                 waitpid(proc5, NULL, 0);
-                for (int i = NR_THS - 1; i >= 0; i--)
+                for (int i = 0; i < NR_THS; i++)
                 {
                     paramThs[i].threadID = i + 1;
                     paramThs[i].proces = 4;
@@ -189,6 +188,10 @@ int main(int argc, char **argv)
         else
         { // aici in p2
             waitpid(proc4, NULL, 0);
+            for (int i = NR_TH - 1; i >= 0; i--)
+            {
+                pthread_join(thread_id25[i], NULL);
+            }
             info(END, 2, 0); // termin p2
         }
     }
@@ -233,8 +236,7 @@ int main(int argc, char **argv)
             }
         }
     }
-    sem_unlink("sem1");
-    sem_unlink("sem2");
+
     sem_destroy(&sem3);
     sem_destroy(&sem4);
     sem_destroy(&sem12);
