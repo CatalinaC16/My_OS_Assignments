@@ -24,35 +24,42 @@ typedef struct thread_str
     int threadID;
 
 } thread_str;
-void *th23(void *param)
+
+void *thFuncProc2(void *param)
 {
     thread_str *th = (thread_str *)param;
-    info(BEGIN, th->proces, th->threadID);
-    info(END, th->proces, th->threadID);
-    sem_post(sem23_52);
+    if (th->threadID == 1)
+    {
+        printf("aici %d",th->threadID);
+        sem_wait(sem21_52);
+         printf("aici %d",th->threadID);
+        info(BEGIN, th->proces, th->threadID);
+        info(END, th->proces, th->threadID);
+    }
+    else if (th->threadID == 3)
+    {
+        info(BEGIN, th->proces, th->threadID);
+        info(END, th->proces, th->threadID);
+        sem_post(sem23_52);
+    }
+    else
+    {
+        info(BEGIN, th->proces, th->threadID);
+        info(END, th->proces, th->threadID);
+    }
     return NULL;
 }
-void *th21(void *param)
-{
-    // sem_wait(sem21_52);
-    thread_str *th = (thread_str *)param;
-    info(BEGIN, th->proces, th->threadID);
-    info(END, th->proces, th->threadID);
-    return NULL;
-}
-void *th52(void *param)
-{
-    sem_wait(sem23_52);
-    thread_str *th = (thread_str *)param;
-    info(BEGIN, th->proces, th->threadID);
-    info(END, th->proces, th->threadID);
-    sem_post(sem21_52);
-    return NULL;
-}
-void *thFunc_cr(void *param)
+void *thFuncProc5(void *param)
 {
     thread_str *th = (thread_str *)param;
-    if (th->threadID == 3)
+    if (th->threadID == 2)
+    {
+        sem_wait(sem23_52);
+        info(BEGIN, th->proces, th->threadID);
+        info(END, th->proces, th->threadID);
+        sem_post(sem21_52);
+    }
+    else if (th->threadID == 3)
     {
         sem_wait(&sem4);
         info(BEGIN, th->proces, th->threadID);
@@ -75,15 +82,6 @@ void *thFunc_cr(void *param)
     return NULL;
 }
 
-void *thFuncProc2(void *param)
-{
-    thread_str *th = (thread_str *)param;
-
-    info(BEGIN, th->proces, th->threadID);
-    info(END, th->proces, th->threadID);
-
-    return NULL;
-}
 void *thFunc(void *param)
 {
     thread_str *th = (thread_str *)param;
@@ -114,6 +112,7 @@ void *thFunc(void *param)
 }
 int main(int argc, char **argv)
 {
+    init();
     thread_str paramThreads[NR_TH];
     pthread_t thread_ids[NR_TH];
 
@@ -129,11 +128,9 @@ int main(int argc, char **argv)
     sem_init(&sem3, 0, 0);
     sem_init(&sem4, 0, 0);
     sem_init(&sem12, 0, 0);
-    sem23_52 = sem_open("sem1", O_CREAT | O_EXCL, 0644, 0);
-    sem21_52 = sem_open("sem2", O_CREAT | O_EXCL, 0644, 0);
-    // sem_init(&sem21_52, 1, 0);
-    // sem_init(&sem23_52, 1, 0);
-    init();
+
+    sem23_52 = sem_open("sem1", O_CREAT, 0644, 0);
+    sem21_52 = sem_open("sem2", O_CREAT, 0644, 0);
     pid_t proc2 = -1, proc3 = -1, proc4 = -1, proc5 = -1, proc6 = -1, proc7 = -1;
     info(BEGIN, 1, 0); // incep p1 - procesul principal
     proc2 = fork();
@@ -141,28 +138,14 @@ int main(int argc, char **argv)
     {
         // aici in p2
         info(BEGIN, 2, 0); // incep p2
-        sem23_52 = sem_open("sem1", O_RDWR);
-        sem21_52 = sem_open("sem2", O_RDWR);
-        for (int i = 0; i < NR_TH; i++)
+        for (int i = NR_TH - 1; i >= 0; i--)
         {
             paramThread25[i].threadID = i + 1;
             paramThread25[i].proces = 2;
-            if (paramThread25[i].threadID == 1)
-            {
-                pthread_create(&thread_id25[i], NULL, th21, &paramThread25[i]);
-            }
-            else if (paramThread25[i].threadID == 3)
-            {
-                pthread_create(&thread_id25[i], NULL, th23, &paramThread25[i]);
-            }
-            else
-                pthread_create(&thread_id25[i], NULL, thFuncProc2, &paramThread25[i]);
+            pthread_create(&thread_id25[i], NULL, thFuncProc2, &paramThread25[i]);
         }
-        for (int i = 0; i < NR_TH; i++)
-        {
-            pthread_join(thread_id25[i], NULL);
-        }
-        proc4 = fork();
+     
+        proc4 = fork(); // procesul 4
         if (proc4 == 0)
         {
             info(BEGIN, 4, 0); // incep p4
@@ -171,18 +154,11 @@ int main(int argc, char **argv)
             {
                 // aici in p5
                 info(BEGIN, 5, 0); // incep p5
-                sem23_52 = sem_open("sem1", O_RDWR);
-                sem21_52 = sem_open("sem2", O_RDWR);
                 for (int i = NR_TH - 1; i >= 0; i--)
                 {
                     paramThreads[i].threadID = i + 1;
                     paramThreads[i].proces = 5;
-                    if (paramThreads[i].threadID == 2)
-                    {
-                        pthread_create(&thread_ids[i], NULL, th52, &paramThreads[i]);
-                    }
-                    else
-                        pthread_create(&thread_ids[i], NULL, thFunc_cr, &paramThreads[i]);
+                    pthread_create(&thread_ids[i], NULL, thFuncProc5, &paramThreads[i]);
                 }
 
                 for (int i = 0; i < NR_TH; i++)
@@ -196,7 +172,7 @@ int main(int argc, char **argv)
             {
                 // aici in p4
                 waitpid(proc5, NULL, 0);
-                for (int i = 0; i < NR_THS; i++)
+                for (int i = NR_THS - 1; i >= 0; i--)
                 {
                     paramThs[i].threadID = i + 1;
                     paramThs[i].proces = 4;
@@ -257,7 +233,8 @@ int main(int argc, char **argv)
             }
         }
     }
-    
+    sem_unlink("sem1");
+    sem_unlink("sem2");
     sem_destroy(&sem3);
     sem_destroy(&sem4);
     sem_destroy(&sem12);
