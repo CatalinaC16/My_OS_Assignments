@@ -12,10 +12,10 @@
 
 sem_t sem3, sem4, sem12;
 sem_t *sem23_52, *sem21_52;
-pthread_mutex_t mutexThs;
-pthread_cond_t varThs;
+pthread_mutex_t mutexThs, mutexTh12;
+pthread_cond_t varThs, varTh12;
 
-int nrTotalThSimultan = 0;
+int nrTotalThSimultan = 0, gata = 0, nr = 0;
 int th12Flag = 0, flg23 = 0;
 
 typedef struct thread_str
@@ -76,36 +76,69 @@ void *thFuncProc5(void *param)
         info(BEGIN, th->proces, th->threadID);
         info(END, th->proces, th->threadID);
     }
-
     return NULL;
 }
 
 void *thFunc(void *param)
 {
     thread_str *th = (thread_str *)param;
+
     pthread_mutex_lock(&mutexThs);
     while (nrTotalThSimultan >= 6)
     {
         pthread_cond_wait(&varThs, &mutexThs);
     }
     nrTotalThSimultan += 1;
-    if (nrTotalThSimultan == 6)
-    {
-        sem_post(&sem12);
-    }
     pthread_mutex_unlock(&mutexThs);
-
-    info(BEGIN, th->proces, th->threadID);
     if (th->threadID == 12)
     {
-        sem_wait(&sem12);
+        th12Flag = 1;
+    }
+    info(BEGIN, th->proces, th->threadID);
+    if (th12Flag == 1)
+    {
+        if (th->threadID == 12)
+        {
+            printf("eu intru in asteptare %d %d\n", th->threadID, gata);
+            sem_wait(&sem12);
+        }
+        else
+        {
+            pthread_mutex_lock(&mutexTh12);
+            nr++;
+            printf("eu intru in asteptare %d %d %d \n", th->threadID, nr, nrTotalThSimultan);
+            if (nr == 5)
+            {
+                sem_post(&sem12);
+            }
+            pthread_cond_wait(&varTh12, &mutexTh12);
+            pthread_mutex_unlock(&mutexTh12);
+        }
     }
     info(END, th->proces, th->threadID);
+    if (th->threadID == 12)
+    {
+        gata = 1;
+        th12Flag = 0;
+    }
 
+    if (gata == 1)
+    {
+        pthread_mutex_lock(&mutexTh12);
+        pthread_cond_broadcast(&varTh12);
+        pthread_mutex_unlock(&mutexTh12);
+        gata = 0;
+    }
+    else
+    {
+        pthread_mutex_lock(&mutexThs);
+        pthread_cond_broadcast(&varThs);
+        pthread_mutex_unlock(&mutexThs);
+    }
     pthread_mutex_lock(&mutexThs);
     nrTotalThSimultan -= 1;
-    pthread_cond_signal(&varThs);
     pthread_mutex_unlock(&mutexThs);
+
     return NULL;
 }
 int main(int argc, char **argv)
@@ -121,11 +154,14 @@ int main(int argc, char **argv)
     pthread_t thread_id25[NR_TH];
 
     pthread_mutex_init(&mutexThs, NULL);
+    pthread_mutex_init(&mutexTh12, NULL);
     pthread_cond_init(&varThs, NULL);
+    pthread_cond_init(&varTh12, NULL);
 
     sem_init(&sem3, 0, 0);
     sem_init(&sem4, 0, 0);
     sem_init(&sem12, 0, 0);
+
     sem_unlink("sem1");
     sem_unlink("sem2");
     sem23_52 = sem_open("sem1", O_CREAT, 0644, 0);
@@ -192,7 +228,7 @@ int main(int argc, char **argv)
             {
                 pthread_join(thread_id25[i], NULL);
             }
-            
+
             info(END, 2, 0); // termin p2
         }
     }
