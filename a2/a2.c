@@ -99,7 +99,7 @@ void *thFunc(void *param)
     {
         if (th->threadID == 12)
         {
-            printf("eu intru in asteptare %d %d\n", th->threadID, gata);
+            printf("eu intru in asteptare %d %d %d\n", th->threadID, gata, nrTotalThSimultan);
             sem_wait(&sem12);
         }
         else
@@ -124,10 +124,10 @@ void *thFunc(void *param)
 
     if (gata == 1)
     {
+        gata = 0;
         pthread_mutex_lock(&mutexTh12);
         pthread_cond_broadcast(&varTh12);
         pthread_mutex_unlock(&mutexTh12);
-        gata = 0;
     }
     else
     {
@@ -173,14 +173,7 @@ int main(int argc, char **argv)
     {
         // aici in p2
         info(BEGIN, 2, 0); // incep p2
-        for (int i = 0; i < NR_TH; i++)
-        {
-            paramThread25[i].threadID = i + 1;
-            paramThread25[i].proces = 2;
-            pthread_create(&thread_id25[i], NULL, thFuncProc2, &paramThread25[i]);
-        }
-
-        proc4 = fork(); // procesul 4
+        proc4 = fork();    // procesul 4
         if (proc4 == 0)
         {
             info(BEGIN, 4, 0); // incep p4
@@ -223,8 +216,14 @@ int main(int argc, char **argv)
         }
         else
         { // aici in p2
+            for (int i = 0; i < NR_TH; i++)
+            {
+                paramThread25[i].threadID = i + 1;
+                paramThread25[i].proces = 2;
+                pthread_create(&thread_id25[i], NULL, thFuncProc2, &paramThread25[i]);
+            }
             waitpid(proc4, NULL, 0);
-            for (int i = NR_TH - 1; i >= 0; i--)
+            for (int i = 0; i < NR_TH; i++)
             {
                 pthread_join(thread_id25[i], NULL);
             }
