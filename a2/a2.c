@@ -10,7 +10,7 @@
 #define NR_TH 4
 #define NR_THS 37
 
-sem_t sem3, sem4, sem12;
+sem_t sem3, sem4, sem12, sem6, sem5;
 sem_t *sem23_52, *sem21_52;
 pthread_mutex_t mutexThs, mutexTh12;
 pthread_cond_t varThs, varTh12;
@@ -82,14 +82,7 @@ void *thFuncProc5(void *param)
 void *thFunc(void *param)
 {
     thread_str *th = (thread_str *)param;
-
-    pthread_mutex_lock(&mutexThs);
-    while (nrTotalThSimultan >= 6)
-    {
-        pthread_cond_wait(&varThs, &mutexThs);
-    }
-    nrTotalThSimultan += 1;
-    pthread_mutex_unlock(&mutexThs);
+    sem_wait(&sem6);
     if (th->threadID == 12)
     {
         th12Flag = 1;
@@ -104,15 +97,13 @@ void *thFunc(void *param)
         }
         else
         {
-            pthread_mutex_lock(&mutexTh12);
             nr++;
             printf("eu intru in asteptare %d %d %d \n", th->threadID, nr, nrTotalThSimultan);
             if (nr == 5)
             {
                 sem_post(&sem12);
             }
-            pthread_cond_wait(&varTh12, &mutexTh12);
-            pthread_mutex_unlock(&mutexTh12);
+            sem_wait(&sem5);
         }
     }
     info(END, th->proces, th->threadID);
@@ -125,19 +116,13 @@ void *thFunc(void *param)
     if (gata == 1)
     {
         gata = 0;
-        pthread_mutex_lock(&mutexTh12);
-        pthread_cond_broadcast(&varTh12);
-        pthread_mutex_unlock(&mutexTh12);
+        sem_post(&sem5);
+        sem_post(&sem5);
+        sem_post(&sem5);
+        sem_post(&sem5);
+        sem_post(&sem5);
     }
-    else
-    {
-        pthread_mutex_lock(&mutexThs);
-        pthread_cond_broadcast(&varThs);
-        pthread_mutex_unlock(&mutexThs);
-    }
-    pthread_mutex_lock(&mutexThs);
-    nrTotalThSimultan -= 1;
-    pthread_mutex_unlock(&mutexThs);
+    sem_post(&sem6);
 
     return NULL;
 }
@@ -161,6 +146,8 @@ int main(int argc, char **argv)
     sem_init(&sem3, 0, 0);
     sem_init(&sem4, 0, 0);
     sem_init(&sem12, 0, 0);
+    sem_init(&sem6, 0, 6);
+    sem_init(&sem5, 0, 0);
 
     sem_unlink("sem1");
     sem_unlink("sem2");
