@@ -26,9 +26,14 @@ int main(void)
     char success[] = "SUCCESS!";
     char error[] = "ERROR!";
     char mesWShm[] = "WRITE_TO_SHM!";
+    char mesMap[] = "MAP_FILE!";
 
     int fd_zona;
     void *zona = NULL;
+
+    char nume_fisierPrimit[1024];
+    int fd_fisierPrimit = -1;
+    void *mapare = NULL;
 
     if (mkfifo(PIPE_SCRIERE, 0600) != 0)
     {
@@ -121,6 +126,39 @@ int main(void)
                 return 0;
             }
             memcpy(zona + offset, &value, sizeof(unsigned int));
+            write(fd_scriere, success, strlen(success) * sizeof(char));
+        }
+        else if (strcmp(buffer_comanda, mesMap) == 0)
+        {
+            mapare = NULL;
+            fd_fisierPrimit = -1;
+            int octetiFisier = 0;
+            char ch;
+
+            while (octetiFisier < 251 && read(fd_citire, &ch, 1) == 1)
+            {
+                 if (ch == '!')
+                    break;
+                nume_fisierPrimit[octetiFisier++] = ch;
+               
+            }
+            
+            write(fd_scriere, mesMap, strlen(mesMap) * sizeof(char));
+            fd_fisierPrimit = open(nume_fisierPrimit, O_RDONLY);
+            if (fd_fisierPrimit == -1)
+            {
+                write(fd_scriere, error, strlen(error) * sizeof(char));
+                return 0;
+            }
+            size_t dimensiuneFisier = lseek(fd_fisierPrimit, 0, SEEK_END);
+            lseek(fd_fisierPrimit, 0, SEEK_SET);
+            mapare = mmap(NULL, dimensiuneFisier, PROT_READ, MAP_PRIVATE, fd_fisierPrimit, 0);
+            if (mapare == MAP_FAILED)
+            {
+                write(fd_scriere, error, strlen(error) * sizeof(char));
+                close(fd_fisierPrimit);
+                return 0;
+            }
             write(fd_scriere, success, strlen(success) * sizeof(char));
         }
     }
