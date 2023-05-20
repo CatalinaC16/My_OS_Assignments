@@ -27,13 +27,15 @@ int main(void)
     char error[] = "ERROR!";
     char mesWShm[] = "WRITE_TO_SHM!";
     char mesMap[] = "MAP_FILE!";
+    char mesRead[] = "READ_FROM_FILE_OFFSET!";
 
     int fd_zona;
     void *zona = NULL;
 
-    char nume_fisierPrimit[1024];
+    char nume_fisierPrimit[251];
     int fd_fisierPrimit = -1;
     void *mapare = NULL;
+    size_t dimensiuneFisier;
 
     if (mkfifo(PIPE_SCRIERE, 0600) != 0)
     {
@@ -130,19 +132,17 @@ int main(void)
         }
         else if (strcmp(buffer_comanda, mesMap) == 0)
         {
-            mapare = NULL;
-            fd_fisierPrimit = -1;
             int octetiFisier = 0;
             char ch;
 
             while (octetiFisier < 251 && read(fd_citire, &ch, 1) == 1)
             {
-                 if (ch == '!')
+                if (ch == '!')
                     break;
                 nume_fisierPrimit[octetiFisier++] = ch;
-               
             }
-            
+            nume_fisierPrimit[octetiFisier] = '\0';
+
             write(fd_scriere, mesMap, strlen(mesMap) * sizeof(char));
             fd_fisierPrimit = open(nume_fisierPrimit, O_RDONLY);
             if (fd_fisierPrimit == -1)
@@ -150,15 +150,30 @@ int main(void)
                 write(fd_scriere, error, strlen(error) * sizeof(char));
                 return 0;
             }
-            size_t dimensiuneFisier = lseek(fd_fisierPrimit, 0, SEEK_END);
+            dimensiuneFisier = lseek(fd_fisierPrimit, 0, SEEK_END);
             lseek(fd_fisierPrimit, 0, SEEK_SET);
-            mapare = mmap(NULL, dimensiuneFisier, PROT_READ, MAP_PRIVATE, fd_fisierPrimit, 0);
+            mapare = mmap(NULL, dimensiuneFisier, PROT_READ, MAP_SHARED, fd_fisierPrimit, 0);
             if (mapare == MAP_FAILED)
             {
                 write(fd_scriere, error, strlen(error) * sizeof(char));
                 close(fd_fisierPrimit);
                 return 0;
             }
+            write(fd_scriere, success, strlen(success) * sizeof(char));
+        }
+        else if (strcmp(buffer_comanda, mesRead) == 0)
+        {
+            unsigned int offsetFis, octetiFisier;
+            read(fd_citire, &offsetFis, sizeof(unsigned int));
+            read(fd_citire, &octetiFisier, sizeof(unsigned int));
+            write(fd_scriere, mesRead, strlen(mesRead) * sizeof(char));
+            if ((offsetFis + octetiFisier) > dimensiuneFisier)
+            {
+                write(fd_scriere, error, strlen(error) * sizeof(char));
+                return 0;
+            }
+          
+          
             write(fd_scriere, success, strlen(success) * sizeof(char));
         }
     }
