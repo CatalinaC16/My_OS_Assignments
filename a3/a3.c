@@ -186,8 +186,9 @@ int main(void)
             read(fd_citire, &octetiSectiune, sizeof(unsigned int));
             write(fd_scriere, mesReadSF, strlen(mesReadSF) * sizeof(char));
             unsigned int header_size = 0, no_sect = 0;
-            memcpy(&header_size, (char *)mapare + dimensiuneFisier - (unsigned int )3, 2);           // dimensiune header
-            memcpy(&no_sect,(char *) mapare + dimensiuneFisier - header_size + (unsigned int )2, 1); // nr de sectiuni din fisier
+            unsigned int dim = dimensiuneFisier;
+            memcpy(&header_size, (char *)mapare + dim - (unsigned int )3, 2);           // dimensiune header
+            memcpy(&no_sect,(char *) mapare + dim - header_size + (unsigned int )2, 1); // nr de sectiuni din fisier
             if (section_no < 1 || section_no > no_sect)
             {
                 write(fd_scriere, error, strlen(error) * sizeof(char));
@@ -195,9 +196,9 @@ int main(void)
             else
             {
                 unsigned int sect_offset = 0;
-                unsigned int sect = section_no * 16;
-                memcpy(&sect_offset, mapare + dimensiuneFisier - header_size + (unsigned int )3 + sect + (unsigned int )8, 4);
-                memcpy(zona, mapare + sect_offset + offset_section, octetiSectiune);
+                unsigned int sect = (section_no -1)* 16;
+                memcpy(&sect_offset, (char *)mapare + dim - header_size + (unsigned int )3 + sect + (unsigned int )8, 4);
+                memcpy(zona, (char *)mapare + sect_offset + offset_section, octetiSectiune);
                 write(fd_scriere, success, strlen(success) * sizeof(char));
             }
         }
