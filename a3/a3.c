@@ -29,7 +29,7 @@ int main(void)
     char mesMap[] = "MAP_FILE!";
     char mesRead[] = "READ_FROM_FILE_OFFSET!";
 
-    int fd_zona;
+    int fd_zona = -1;
     void *zona = NULL;
 
     char nume_fisierPrimit[251];
@@ -102,8 +102,8 @@ int main(void)
             if (zona == MAP_FAILED)
             {
                 write(fd_scriere, error, strlen(error) * sizeof(char));
-                munmap(zona, nrOcteti);
-                close(fd_zona);
+                //munmap(zona, nrOcteti);
+               // close(fd_zona);
                 return 0;
             }
             else
@@ -152,7 +152,7 @@ int main(void)
             }
             dimensiuneFisier = lseek(fd_fisierPrimit, 0, SEEK_END);
             lseek(fd_fisierPrimit, 0, SEEK_SET);
-            mapare = mmap(NULL, dimensiuneFisier, PROT_READ, MAP_SHARED, fd_fisierPrimit, 0);
+            mapare = mmap(zona, dimensiuneFisier, PROT_READ, MAP_SHARED, fd_fisierPrimit, 0);
             if (mapare == MAP_FAILED)
             {
                 write(fd_scriere, error, strlen(error) * sizeof(char));
@@ -167,14 +167,15 @@ int main(void)
             read(fd_citire, &offsetFis, sizeof(unsigned int));
             read(fd_citire, &octetiFisier, sizeof(unsigned int));
             write(fd_scriere, mesRead, strlen(mesRead) * sizeof(char));
-            if ((offsetFis + octetiFisier) > dimensiuneFisier)
+            if ((offsetFis + octetiFisier) >= dimensiuneFisier)
             {
                 write(fd_scriere, error, strlen(error) * sizeof(char));
-                return 0;
             }
-          
-          
-            write(fd_scriere, success, strlen(success) * sizeof(char));
+            else
+            {
+                memcpy(zona,(char*)mapare+offsetFis,octetiFisier);               
+                write(fd_scriere, success, strlen(success) * sizeof(char));
+            }
         }
     }
     return 0;
